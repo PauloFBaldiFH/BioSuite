@@ -1,0 +1,17 @@
+name: Linux installer and panel
+on: [push, pull_request]
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [ubuntu:22.04, ubuntu:24.04, debian:12-slim, debian:13-slim]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bootstrap, panel tests and repeat installation
+        env:
+          TEST_IMAGE: ${{ matrix.image }}
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src "$TEST_IMAGE" bash tests/linux-smoke.sh

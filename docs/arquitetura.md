@@ -18,7 +18,11 @@ planejados; este documento não representa uma instalação Galaxy já validada.
 
 ## Instalação e execução
 
-Adotar Ubuntu 24.04 LTS como primeiro alvo Linux a validar, em x86_64.
+O bootstrap do painel cobre Ubuntu 22.04/24.04 e Debian 12/13, em x86_64,
+com instalação por um comando e launcher permanente. Os testes Linux usam
+containers apenas para isolar as distribuições: a instalação final é nativa.
+A mesma matriz será o alvo da instalação Galaxy, ainda pendente de validação
+dos serviços e das ferramentas científicas em cada distribuição.
 No Windows, usar Ubuntu em WSL2, com systemd e os dados no filesystem Linux;
 evitar armazenar datasets e ambientes científicos em `/mnt/c`.
 Outras distribuições e arquiteturas só serão anunciadas após testes próprios.

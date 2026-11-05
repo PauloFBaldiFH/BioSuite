@@ -68,15 +68,20 @@ def inspect_machine(storage: Path) -> Machine:
 
 
 def installation_plan(machine: Machine) -> str:
-    target = (machine.system == 'Linux' and machine.distribution == 'ubuntu'
-              and machine.version == '24.04' and machine.architecture == 'x86_64')
+    target = (machine.system == 'Linux' and machine.architecture == 'x86_64'
+              and (machine.distribution, machine.version) in {
+                  ('ubuntu', '22.04'), ('ubuntu', '24.04'),
+                  ('debian', '12'), ('debian', '13'),
+              })
     observations = [
         'BIO SUITE • PLANO DE INSTALAÇÃO',
         '',
         'Prévia: a instalação do Galaxy ainda não está implementada.',
         'Nenhum comando deste plano será executado.',
         '',
-        f'Alvo inicial: Ubuntu 24.04 x86_64 — {"corresponde" if target else "esta máquina está fora do alvo inicial"}.',
+        'Alvos Linux: Ubuntu 22.04/24.04 e Debian 12/13, x86_64.',
+        f'Plataforma detectada: {machine.distribution} {machine.version} — {"corresponde à matriz do painel" if target else "esta máquina está fora do alvo inicial"}.',
+        'A instalação nativa do Galaxy ainda requer validação própria em cada distribuição.',
         f'Systemd como PID 1: {"sim" if machine.systemd_active else "não; revisar antes de instalar serviços"}.',
         f'RAM detectada: {machine.memory_gib if machine.memory_gib is not None else "desconhecida"} GiB.',
         f'Disco livre: {machine.free_gib} GiB em {machine.storage_path}.',
