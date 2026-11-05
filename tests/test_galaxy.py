@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 from urllib.error import HTTPError, URLError
 
-from biosuite.galaxy import GalaxyClient, GalaxyError, NoRedirect, Repository, ToolSpec, validate_url
+from biosuite.galaxy import GalaxyClient, GalaxyError, NoRedirect, Repository, ToolShedClient, ToolSpec, validate_url
 
 REPO = Repository('abc123', 'iqtree', 'iuc', '123456abcdef', 'toolshed.g2.bx.psu.edu', 'Installed', False, False)
 
@@ -131,3 +131,37 @@ class GalaxyTests(unittest.TestCase):
         with self.assertRaises(GalaxyError) as caught:
             self.client.repositories()
         self.assertNotIn('test-secret', str(caught.exception))
+
+    def test_public_search_normalizes_results_and_paginates(self):
+        shed = ToolShedClient()
+        opener = Opener({'hits': [{'repository': {'name': 'fastqc', 'repo_owner_username': 'devteam',
+                                                  'description': 'Quality report'}}], 'total_results': '21'})
+        shed._opener = opener
+        page = shed.search('fast qc', page=2)
+        self.assertEqual(page.hits[0].owner, 'devteam')
+        self.assertEqual(page.total, 21)
+        self.assertTrue(page.has_next)
+        request = opener.requests[0]
+        self.assertEqual(request.method, 'GET')
+        self.assertIn('q=fast+qc&page=2&page_size=10', request.full_url)
+        self.assertIsNone(request.get_header('X-api-key'))
+
+    def test_empty_search_page_and_invalid_payload(self):
+        shed = ToolShedClient()
+        shed._opener = Opener({'hits': [], 'total_results': 0})
+        page = shed.search('not-found')
+        self.assertFalse(page.has_next)
+        self.assertEqual(page.hits, ())
+        for result in ([], {'hits': {}, 'total_results': 0}, {'hits': [], 'total_results': -1},
+                       {'hits': [{'repository': {'name': 'unknown'}}], 'total_results': 1}):
+            with self.subTest(result=result), self.assertRaises(GalaxyError):
+                shed._opener = Opener(result)
+                shed.search('test')
+
+    def test_search_rejects_invalid_input_before_network(self):
+        shed = ToolShedClient()
+        shed._opener = Opener()
+        for query, page in [('', 1), ('x' * 201, 1), ('line\nbreak', 1), ('name', 0)]:
+            with self.subTest(query=query, page=page), self.assertRaises(GalaxyError):
+                shed.search(query, page)
+        self.assertEqual(shed._opener.requests, [])

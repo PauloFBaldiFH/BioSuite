@@ -15,8 +15,11 @@ de administrador e clique em **Conectar**. A chave fica apenas em memória;
 também é possível fornecer `GALAXY_URL` e `GALAXY_API_KEY` no ambiente local.
 Não envie chaves pelo chat nem as salve no repositório.
 
-- Instalação: escolha IQ-TREE, QIIME 2 Feature Table ou outro repositório,
-  consulte as revisões, selecione uma e confirme o plano.
+- Catálogo: pesquise repositórios no Tool Shed, com páginas de 10 resultados,
+  ou escolha entre 10 atalhos organizados por área. Buscar e consultar revisões
+  não exigem um Galaxy conectado nem chave de API.
+- Instalação: conecte seu Galaxy, escolha o repositório e uma revisão e confirme
+  o plano. Selecionar um resultado de busca apenas preenche o formulário.
 - Acompanhamento: use **Atualizar estado** para consultar o servidor.
 - Desinstalação: selecione uma linha, confira o repositório, revisão e ID e
   confirme a remoção pelo Galaxy.
@@ -26,6 +29,11 @@ dependem de Docker no destino de execução do Galaxy; esse requisito não é
 instalado automaticamente. A integração foi verificada com testes simulados
 da API e do painel; a instalação e uma análise científica em Galaxy real ainda
 precisam de validação. Consulte o [guia dos módulos](docs/modulos.md).
+
+Atalhos atuais: FastQC, MultiQC, fastp, Cutadapt, Trimmomatic, Bowtie 2, BWA,
+SPAdes, IQ-TREE e QIIME 2 Feature Table. A busca pública permite descobrir outros
+repositórios sem precisar de uma nova versão do BioSuite. Disponibilidade no
+catálogo não significa compatibilidade ou execução científica já validadas.
 
 ## Instalar no Ubuntu ou Debian com um comando
 
