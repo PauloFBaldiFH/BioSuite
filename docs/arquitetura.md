@@ -60,6 +60,12 @@ Ocultar credenciais dos logs e restringir permissões dos arquivos locais.
 
 ## Ferramentas científicas
 
+O painel já possui um cliente da API do Galaxy para listar repositórios,
+consultar revisões públicas no Tool Shed, solicitar instalação e remover um
+repositório selecionado mediante confirmação. Essa integração exige um Galaxy
+existente. Os testes atuais simulam a API; a execução científica ainda não
+foi validada. Veja [Módulos](modulos.md) para requisitos e limites.
+
 Integrar o catálogo e a instalação pelo Tool Shed/API do Galaxy e seus
 resolvers de dependências. Conda não exige contêiner: cada dependência será
 isolada conforme o mecanismo suportado pelo Galaxy. Não instalar todos os
@@ -72,6 +78,10 @@ instalada, falhou e teste funcional aprovado. Mostrar que estimativas de
 espaço podem não incluir bases de referência e dados do usuário.
 
 Primeiras ferramentas confirmadas pelo usuário: QIIME 2 e IQ-TREE.
+O catálogo inicial identifica `iuc/iqtree` e o plugin QIIME 2 Feature Table
+(`q2d2/suite_qiime2__feature_table`). Os wrappers oficiais atuais do QIIME 2
+usam Docker, exigindo configuração própria do destino de jobs do Galaxy;
+não há instalação automática desse runtime pelo painel.
 Validar disponibilidade e wrappers na release
 escolhida antes de prometer suporte. QIIME 2 pode envolver vários wrappers
 e dependências volumosas; não será tratado como pacote leve.

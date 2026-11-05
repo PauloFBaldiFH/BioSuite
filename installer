@@ -166,7 +166,7 @@ biosuite_main() {
         *":$bin_dir:"*) echo 'Você também pode usar: biosuite' ;;
         *) printf 'Para usar o nome curto nesta sessão: export PATH=%q:"$PATH"\n' "$bin_dir" ;;
     esac
-    echo 'Galaxy e módulos científicos ainda não são instalados por esta versão.'
+    echo 'Este bootstrap não instala o Galaxy nem ferramentas científicas automaticamente.'
     # Libera o lock antes de entrar no painel. APT e pip não consomem o stdin do download.
     biosuite_cleanup
     trap - EXIT INT TERM HUP

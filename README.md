@@ -4,9 +4,28 @@ Suite de administração do [Galaxy](https://github.com/galaxyproject/galaxy),
 com painel interativo no terminal e instalação de ferramentas sob demanda.
 
 **Estado: primeira base funcional.** O bootstrap instala o painel Python;
-o painel oferece diagnóstico local e uma prévia das etapas de instalação.
-A instalação do Galaxy e as integrações científicas, de backup e de conexão
-ainda estão em desenvolvimento.
+o painel oferece diagnóstico local, prévia da instalação e gestão de repositórios
+de ferramentas em um Galaxy existente. A instalação da base do Galaxy, os
+backups e a conexão pública ainda estão em desenvolvimento.
+
+## Módulos no painel
+
+Abra **Ferramentas**, informe a URL de um Galaxy existente e sua chave de API
+de administrador e clique em **Conectar**. A chave fica apenas em memória;
+também é possível fornecer `GALAXY_URL` e `GALAXY_API_KEY` no ambiente local.
+Não envie chaves pelo chat nem as salve no repositório.
+
+- Instalação: escolha IQ-TREE, QIIME 2 Feature Table ou outro repositório,
+  consulte as revisões, selecione uma e confirme o plano.
+- Acompanhamento: use **Atualizar estado** para consultar o servidor.
+- Desinstalação: selecione uma linha, confira o repositório, revisão e ID e
+  confirme a remoção pelo Galaxy.
+
+O preset QIIME 2 cobre apenas Feature Table. Os wrappers oficiais atuais
+dependem de Docker no destino de execução do Galaxy; esse requisito não é
+instalado automaticamente. A integração foi verificada com testes simulados
+da API e do painel; a instalação e uma análise científica em Galaxy real ainda
+precisam de validação. Consulte o [guia dos módulos](docs/modulos.md).
 
 ## Instalar no Ubuntu ou Debian com um comando
 
@@ -78,8 +97,8 @@ Execute-o novamente após alterações no código para atualizar o pacote instal
 O painel tem navegação por mouse e teclado, menu lateral com rolagem e telas
 Início, Instalação, Ferramentas, Backups, Conexão e Diagnóstico.
 Atalhos: `d` para diagnóstico, `p` para plano e `q` para sair.
-Somente diagnóstico e prévia do plano estão operacionais; as demais integrações
-são apresentadas como funcionalidades em desenvolvimento.
+A gestão de ferramentas exige um Galaxy existente configurado. Backup e conexão
+pública são apresentados como funcionalidades em desenvolvimento.
 
 Também é possível consultar sem abrir o painel:
 
@@ -99,7 +118,8 @@ PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
 ```
 
 Os testes cobrem diagnóstico, matriz de distribuições, preservação da instalação
-anterior quando uma atualização falha e navegação em terminais de 110×40 e 80×24.
+anterior quando uma atualização falha, contratos simulados da API Galaxy,
+confirmação e cancelamento de operações, e navegação em terminais de 110×40 e 80×24.
 A CI também instala o painel por pipe e reexecuta a instalação nas quatro
 distribuições, em containers descartáveis. O usuário não precisa de Docker
 para instalar o BioSuite. Esses testes não validam uma instalação real do
