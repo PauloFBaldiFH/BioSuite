@@ -1,0 +1,181 @@
+#!/usr/bin/env bash
+# BioSuite: bootstrap Linux independente do checkout.
+set -euo pipefail
+
+biosuite_usage() {
+    cat <<'EOF'
+BioSuite — instalador do painel para Ubuntu e Debian
+
+Uso: bash installer [--no-launch] [--ref BRANCH_OU_TAG]
+                     [--prefix DIRETORIO] [--bin-dir DIRETORIO]
+                     [--source CHECKOUT_LOCAL] [--check]
+
+Instala o painel e seus pré-requisitos; não instala Galaxy ou módulos científicos.
+--check       Verifica plataforma e pré-requisitos sem instalar nada.
+--no-launch   Instala sem abrir o painel (servidores e automação).
+--source      Usa um checkout local em vez de baixar o GitHub.
+--ref         Branch/tag do BioSuite (padrão: main); não é a versão do Galaxy.
+EOF
+}
+
+biosuite_supported_os() {
+    case "$1:$2" in
+        ubuntu:22.04|ubuntu:24.04|debian:12|debian:13) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+biosuite_cleanup() {
+    [[ -z "${biosuite_source_tmp:-}" ]] || rm -rf -- "$biosuite_source_tmp"
+    [[ -z "${biosuite_pending_link:-}" ]] || rm -f -- "$biosuite_pending_link"
+    if [[ "${biosuite_activated:-0}" != 1 && -n "${biosuite_release:-}" ]]; then
+        rm -rf -- "$biosuite_release"
+    fi
+    [[ -z "${biosuite_launcher_tmp:-}" ]] || rm -f -- "$biosuite_launcher_tmp"
+    [[ -z "${biosuite_lock:-}" ]] || rmdir -- "$biosuite_lock"
+    return 0
+}
+
+biosuite_main() {
+    local ref=main source_dir='' prefix='' bin_dir='' launch=1 check=0
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --help|-h) biosuite_usage; return 0 ;;
+            --no-launch) launch=0; shift ;;
+            --check) check=1; shift ;;
+            --ref|--source|--prefix|--bin-dir)
+                [[ $# -ge 2 && -n "$2" ]] || { echo "Valor ausente: $1" >&2; return 2; }
+                case "$1" in
+                    --ref) ref=$2 ;; --source) source_dir=$2 ;;
+                    --prefix) prefix=$2 ;; --bin-dir) bin_dir=$2 ;;
+                esac
+                shift 2 ;;
+            *) echo "Opção desconhecida: $1" >&2; return 2 ;;
+        esac
+    done
+    [[ "$ref" =~ ^[[:alnum:]][[:alnum:]._/-]*$ && "$ref" != *..* ]] || {
+        echo 'Branch/tag inválida.' >&2; return 2;
+    }
+    [[ "$(uname -s)" == Linux ]] || { echo 'Execute no Linux; Windows precisará do WSL2.' >&2; return 1; }
+    [[ -r /etc/os-release ]] || { echo 'Não foi possível identificar a distribuição.' >&2; return 1; }
+    local ID='' VERSION_ID=''
+    . /etc/os-release
+    if ! biosuite_supported_os "$ID" "$VERSION_ID"; then
+        echo "Sistema fora da matriz inicial: $ID $VERSION_ID. Use Ubuntu 22.04/24.04 ou Debian 12/13." >&2
+        return 1
+    fi
+    [[ "$(uname -m)" == x86_64 ]] || { echo 'A matriz inicial cobre apenas x86_64.' >&2; return 1; }
+    local -a packages=() elevate=()
+    command -v python3 >/dev/null 2>&1 || packages+=(python3)
+    if ! python3 -c 'import venv, ensurepip' >/dev/null 2>&1; then
+        packages+=(python3-venv)
+    fi
+    [[ -n "$source_dir" ]] || command -v git >/dev/null 2>&1 || packages+=(git)
+    dpkg-query -W -f='${Status}' ca-certificates 2>/dev/null | grep -qx 'install ok installed' || packages+=(ca-certificates)
+    printf 'Plataforma: %s %s, x86_64\n' "$ID" "$VERSION_ID"
+    if [[ ${#packages[@]} -gt 0 ]]; then
+        printf 'Pacotes necessários: %s\n' "${packages[*]}"
+    else
+        echo 'Pré-requisitos do painel encontrados.'
+    fi
+    [[ "$check" == 0 ]] || return 0
+
+    if [[ "$EUID" == 0 ]]; then
+        prefix=${prefix:-/opt/biosuite}
+        bin_dir=${bin_dir:-/usr/local/bin}
+    else
+        prefix=${prefix:-${XDG_DATA_HOME:-$HOME/.local/share}/biosuite}
+        bin_dir=${bin_dir:-$HOME/.local/bin}
+    fi
+    [[ "$prefix" == /* && "$bin_dir" == /* && "$prefix" != / ]] || {
+        echo 'Use caminhos absolutos e um prefixo diferente de /.' >&2; return 2;
+    }
+    local launcher="$bin_dir/biosuite"
+    if [[ -e "$launcher" || -L "$launcher" ]]; then
+        if [[ -L "$launcher" ]] || ! grep -Fxq '# BioSuite managed launcher' "$launcher"; then
+            echo "Não vou substituir o arquivo existente: $launcher" >&2; return 1
+        fi
+        # Um mesmo comando não pode ser redirecionado silenciosamente para outro prefixo.
+        grep -Fxq "# Prefix: $prefix" "$launcher" || {
+            echo "O comando $launcher pertence a outro prefixo. Escolha outro --bin-dir." >&2; return 1;
+        }
+    fi
+    if [[ -e "$prefix/current" && ! -L "$prefix/current" ]]; then
+        echo "O caminho $prefix/current já existe e não é um link gerenciado." >&2; return 1
+    fi
+    mkdir -p -- "$prefix/releases" "$bin_dir"
+    biosuite_lock=''
+    if ! mkdir -- "$prefix/.install-lock" 2>/dev/null; then
+        echo "Outra instalação pode estar em andamento: $prefix/.install-lock" >&2
+        echo 'Se ela foi encerrada abruptamente, confira os processos antes de remover esse diretório vazio.' >&2
+        return 1
+    fi
+    biosuite_lock="$prefix/.install-lock"
+    biosuite_source_tmp='' biosuite_release='' biosuite_launcher_tmp='' biosuite_pending_link='' biosuite_activated=0
+    trap biosuite_cleanup EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    trap 'exit 129' HUP
+
+    if [[ ${#packages[@]} -gt 0 ]]; then
+        if [[ "$EUID" != 0 ]]; then
+            command -v sudo >/dev/null 2>&1 || {
+                echo "Peça ao administrador para instalar: ${packages[*]}" >&2; return 1;
+            }
+            elevate=(sudo)
+        fi
+        echo 'Instalando somente os pré-requisitos listados via APT...'
+        "${elevate[@]}" apt-get update
+        "${elevate[@]}" env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${packages[@]}"
+    fi
+    python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else "Python 3.10+ é necessário.")'
+
+    if [[ -z "$source_dir" ]]; then
+        biosuite_source_tmp=$(mktemp -d)
+        GIT_TERMINAL_PROMPT=0 git clone --depth 1 --branch "$ref" -- https://github.com/PauloFBaldiFH/BioSuite.git "$biosuite_source_tmp/source"
+        source_dir="$biosuite_source_tmp/source"
+    fi
+    [[ -f "$source_dir/pyproject.toml" && -d "$source_dir/src/biosuite" ]] || {
+        echo 'O checkout selecionado não contém o pacote BioSuite. Confira a branch/tag.' >&2; return 1;
+    }
+    biosuite_release=$(mktemp -d "$prefix/releases/panel.XXXXXXXX")
+    echo 'Preparando ambiente Python isolado; a instalação anterior permanece disponível...'
+    python3 -m venv "$biosuite_release"
+    "$biosuite_release/bin/python" -m pip install --no-input --disable-pip-version-check "$source_dir"
+    # Importa também o painel para detectar dependências quebradas antes da ativação.
+    "$biosuite_release/bin/python" -c 'from biosuite.panel import BioSuiteApp'
+    "$biosuite_release/bin/biosuite" --version
+    "$biosuite_release/bin/biosuite" doctor >/dev/null
+
+    biosuite_launcher_tmp=$(mktemp "$bin_dir/.biosuite.XXXXXXXX")
+    {
+        printf '#!/usr/bin/env bash\n# BioSuite managed launcher\n# Prefix: %s\n' "$prefix"
+        printf 'exec %q "$@"\n' "$prefix/current/bin/biosuite"
+    } >"$biosuite_launcher_tmp"
+    chmod 755 "$biosuite_launcher_tmp"
+    biosuite_pending_link="$prefix/.current.${biosuite_release##*/}"
+    ln -s -- "$biosuite_release" "$biosuite_pending_link"
+    # O launcher existente aponta sempre para current, que só troca após a validação.
+    mv -fT -- "$biosuite_launcher_tmp" "$launcher"
+    biosuite_launcher_tmp=''
+    mv -fT -- "$biosuite_pending_link" "$prefix/current"
+    biosuite_pending_link=''
+    biosuite_activated=1
+    printf '\nBioSuite instalado. Para abrir novamente: %s\n' "$launcher"
+    case ":$PATH:" in
+        *":$bin_dir:"*) echo 'Você também pode usar: biosuite' ;;
+        *) printf 'Para usar o nome curto nesta sessão: export PATH=%q:"$PATH"\n' "$bin_dir" ;;
+    esac
+    echo 'Este bootstrap não instala o Galaxy nem ferramentas científicas automaticamente.'
+    # Libera o lock antes de entrar no painel. APT e pip não consomem o stdin do download.
+    biosuite_cleanup
+    trap - EXIT INT TERM HUP
+    if [[ "$launch" == 1 && -t 1 ]] && ( : </dev/tty ) 2>/dev/null; then
+        exec "$launcher" </dev/tty
+    fi
+}
+
+# Permite testar as funções de detecção sem executar instalação.
+if [[ -z "${BASH_SOURCE[0]:-}" || "${BASH_SOURCE[0]}" == "$0" ]]; then
+    biosuite_main "$@"
+fi

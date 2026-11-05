@@ -26,6 +26,16 @@ class PreflightTests(unittest.TestCase):
         self.assertIn('ainda não está implementada', plan)
         self.assertIn('nenhum', plan.lower())
 
+    def test_debian_and_ubuntu_are_in_panel_matrix(self):
+        for distro, version in [('debian', '12'), ('debian', '13'),
+                               ('ubuntu', '22.04'), ('ubuntu', '24.04')]:
+            with self.subTest(distro=distro, version=version):
+                machine = Machine('Linux', 'x86_64', distro, version, '3.12',
+                                  False, 8, 40, '/data', True, {})
+                plan = installation_plan(machine)
+                self.assertIn('corresponde à matriz do painel', plan)
+                self.assertIn('Galaxy ainda requer validação própria', plan)
+
     def test_doctor_returns_machine_json(self):
         output = io.StringIO()
         with contextlib.redirect_stdout(output):

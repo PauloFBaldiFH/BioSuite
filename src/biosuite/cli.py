@@ -11,7 +11,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description='BioSuite — painel modular para Galaxy')
     parser.add_argument('--storage', type=Path, default=Path.cwd(),
                         help='Caminho onde os dados serão armazenados; usado para medir espaço')
-    parser.add_argument('--version', action='version', version='BioSuite 0.1.0')
+    parser.add_argument('--version', action='version', version='BioSuite 0.2.0')
     commands = parser.add_subparsers(dest='command')
     commands.add_parser('doctor', help='Diagnóstico local em JSON; não certifica prontidão do Galaxy')
     commands.add_parser('plan', help='Prévia das etapas; não executa a instalação do Galaxy')

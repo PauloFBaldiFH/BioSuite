@@ -1,4 +1,4 @@
-"""Primeiro painel: diagnóstico real e apresentação do plano, sem mutações."""
+"""Painel de diagnóstico e gestão de módulos em um Galaxy existente."""
 
 import json
 from pathlib import Path
@@ -9,6 +9,7 @@ from textual.containers import Horizontal, VerticalScroll
 from textual.widgets import Button, Footer, Header, Static
 
 from biosuite.preflight import inspect_machine, installation_plan
+from biosuite.modules import ModulePanel
 
 
 class BioSuiteApp(App):
@@ -47,13 +48,15 @@ class BioSuiteApp(App):
                 yield Static('PRÉVIA • Galaxy não é instalado por esta versão', id='phase')
                 yield Static('', id='page-title')
                 yield Static('', id='page-body')
+                yield ModulePanel(id='module-panel')
         yield Footer()
 
     def on_mount(self) -> None:
         self.show_page('home')
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        self.show_page(event.button.id or 'home')
+        if event.button.id in ('home', 'install', 'tools', 'backup', 'connection', 'doctor'):
+            self.show_page(event.button.id)
 
     def action_diagnose(self) -> None:
         self.show_page('doctor')
@@ -62,6 +65,7 @@ class BioSuiteApp(App):
         self.show_page('install')
 
     def show_page(self, name: str) -> None:
+        self.query_one('#module-panel').display = name == 'tools'
         if name == 'install':
             title = 'Instalação • planejar antes de alterar'
             body = installation_plan(inspect_machine(self.storage))
@@ -73,16 +77,15 @@ class BioSuiteApp(App):
             title, body = {
                 'home': ('Bem-vindo ao BioSuite',
                          'Uma central para instalar, acompanhar e manter seu Galaxy.\n\n'
-                         'Disponível agora\n• Diagnóstico da máquina\n• Prévia do plano de instalação\n\n'
-                         'Em desenvolvimento\n• Instalação nativa do Galaxy\n• Módulos sob demanda\n'
+                         'Disponível agora\n• Diagnóstico da máquina\n• Prévia do plano de instalação\n'
+                         '• Gestão de módulos em um Galaxy existente\n\n'
+                         'Em desenvolvimento\n• Instalação nativa do Galaxy\n'
                          '• Backup e restauração\n• Acesso remoto\n\n'
                          'Comece por Diagnóstico e consulte o plano em Instalação.'),
-                'tools': ('Ferramentas • catálogo planejado',
-                          'QIIME 2 — microbioma e análise de amplicons\n'
-                          'IQ-TREE — inferência filogenética\n\n'
-                          'A integração com o Tool Shed ainda não está implementada.\n'
-                          'Instalações serão individuais, com revisão e dependências identificadas.\n'
-                          'Nenhuma ferramenta será instalada ao abrir esta tela.'),
+                'tools': ('Ferramentas • módulos do Galaxy',
+                          'IQ-TREE e QIIME 2 Feature Table, ou outro repositório do Tool Shed.\n'
+                          'Conecte seu Galaxy, escolha a revisão e confirme a operação.\n'
+                          'Abrir esta tela não faz consultas ou instalações automaticamente.'),
                 'backup': ('Backups • local e nuvem',
                            'Integração em desenvolvimento.\n\n'
                            'O backup incluirá banco, datasets, configurações e manifesto.\n'
