@@ -3,7 +3,7 @@ from unittest.mock import Mock, patch
 
 from textual.widgets import Input, Select, Static
 
-from biosuite.galaxy import Repository
+from biosuite.galaxy import Repository, SearchHit, SearchPage
 from biosuite.modules import ModulePanel
 from biosuite.panel import BioSuiteApp
 
@@ -62,3 +62,51 @@ class ModulePanelTests(unittest.IsolatedAsyncioTestCase):
             await pilot.pause()
             await pilot.click('#module-refresh')
             self.assertIn('Conecte primeiro', str(app.query_one('#module-status', Static).render()))
+
+    async def test_public_search_selection_pagination_and_revisions_without_galaxy(self):
+        app = BioSuiteApp()
+        async with app.run_test(size=(110, 40)) as pilot:
+            app.show_page('tools')
+            panel = app.query_one(ModulePanel)
+            shed = Mock()
+            shed.search.side_effect = [SearchPage('qc', 1, 10, 11, (SearchHit('fastqc', 'devteam', 'Quality'),)),
+                                       SearchPage('qc', 2, 10, 11, (SearchHit('multiqc', 'iuc', 'Reports'),))]
+            shed.revisions.return_value = ['123456abcdef']
+            panel.shed = shed
+
+            async def click(selector):
+                app.query_one(selector).scroll_visible(animate=False)
+                await pilot.pause()
+                await pilot.click(selector)
+                await pilot.pause()
+                await app.workers.wait_for_complete()
+
+            app.query_one('#module-search-query', Input).value = 'qc'
+            await click('#module-search')
+            self.assertIsNone(panel.client)
+            self.assertEqual(app.query_one('#module-name', Input).value, '')
+            await click('#module-search-table')
+            await pilot.press('enter')
+            await pilot.pause()
+            self.assertEqual(app.query_one('#module-name', Input).value, 'fastqc')
+            self.assertEqual(app.query_one('#module-owner', Input).value, 'devteam')
+            self.assertEqual(app.query_one('#module-revision', Input).value, '')
+            await click('#module-revisions')
+            shed.revisions.assert_called_once_with('fastqc', 'devteam')
+            self.assertIsNone(panel.client)
+            await click('#module-search-next')
+            shed.search.assert_called_with('qc', 2)
+            self.assertTrue(app.query_one('#module-search-next').disabled)
+            self.assertFalse(app.query_one('#module-search-prev').disabled)
+            self.assertEqual(panel.search_page.hits[0].name, 'multiqc')
+
+    async def test_curated_presets_fill_correct_owner_and_clear_revision(self):
+        app = BioSuiteApp()
+        async with app.run_test(size=(80, 24)) as pilot:
+            app.show_page('tools')
+            app.query_one('#module-revision', Input).value = '123456abcdef'
+            app.query_one('#module-preset', Select).value = 'spades'
+            await pilot.pause()
+            self.assertEqual(app.query_one('#module-name', Input).value, 'spades')
+            self.assertEqual(app.query_one('#module-owner', Input).value, 'nml')
+            self.assertEqual(app.query_one('#module-revision', Input).value, '')

@@ -83,7 +83,8 @@ class BioSuiteApp(App):
                          '• Backup e restauração\n• Acesso remoto\n\n'
                          'Comece por Diagnóstico e consulte o plano em Instalação.'),
                 'tools': ('Ferramentas • módulos do Galaxy',
-                          'IQ-TREE e QIIME 2 Feature Table, ou outro repositório do Tool Shed.\n'
+                          'Atalhos por área e busca paginada no catálogo público do Tool Shed.\n'
+                          'Inclui IQ-TREE e QIIME 2 Feature Table.\n'
                           'Conecte seu Galaxy, escolha a revisão e confirme a operação.\n'
                           'Abrir esta tela não faz consultas ou instalações automaticamente.'),
                 'backup': ('Backups • local e nuvem',

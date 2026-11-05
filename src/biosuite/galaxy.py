@@ -80,7 +80,40 @@ class NoRedirect(HTTPRedirectHandler):
         return None
 
 
-class GalaxyClient:
+class _JSONTransport:
+    def _request(self, method: str, path: str, payload=None, *, public=False):
+        source = 'Tool Shed' if public else 'Galaxy'
+        data = None if payload is None else json.dumps(payload).encode()
+        headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
+        if not public and self._key is not None:
+            headers['x-api-key'] = self._key
+        req = Request((TOOL_SHED if public else self.url) + path, data=data, method=method, headers=headers)
+        try:
+            with self._opener.open(req, timeout=self.timeout) as response:
+                raw = response.read(8 * 1024 * 1024 + 1)
+            if len(raw) > 8 * 1024 * 1024:
+                raise GalaxyError(f'Resposta do {source} maior que o limite suportado.')
+            result = json.loads(raw)
+        except HTTPError as error:
+            if error.code in (401, 403):
+                message = ('Acesso negado ao Tool Shed. Verifique o acesso de rede ao catálogo público.' if public
+                           else 'Acesso negado. Verifique a chave e a permissão de administrador no Galaxy.')
+            elif 300 <= error.code < 400:
+                message = f'{source} redirecionou a requisição. Informe a URL final correta; a chave não foi encaminhada.'
+            else:
+                message = f'{source} respondeu HTTP {error.code}. Consulte os logs do servidor.'
+            raise GalaxyError(message) from None
+        except (URLError, TimeoutError, socket.timeout, OSError):
+            raise GalaxyError('Falha de conexão ou timeout ao consultar o Tool Shed.' if public else
+                              'Falha de conexão ou timeout. O Galaxy pode continuar a operação; atualize o estado antes de tentar novamente.') from None
+        except (ValueError, UnicodeError):
+            raise GalaxyError(f'A resposta não é JSON válido da API do {source}.') from None
+        if isinstance(result, dict) and (result.get('status') == 'error' or result.get('err_msg')):
+            raise GalaxyError(f'{source} informou uma falha. Consulte os logs do servidor e atualize a lista.')
+        return result
+
+
+class GalaxyClient(_JSONTransport):
     def __init__(self, url: str, api_key: str, timeout: float = 60):
         self.url = validate_url(url)
         if not api_key.strip() or any(ord(c) < 33 or ord(c) > 126 for c in api_key.strip()):
@@ -89,42 +122,10 @@ class GalaxyClient:
         self.timeout = timeout
         self._opener = build_opener(NoRedirect())
 
-    def _request(self, method: str, path: str, payload=None, *, public=False):
-        data = None if payload is None else json.dumps(payload).encode()
-        headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
-        if not public:
-            headers['x-api-key'] = self._key
-        req = Request((TOOL_SHED if public else self.url) + path, data=data, method=method, headers=headers)
-        try:
-            with self._opener.open(req, timeout=self.timeout) as response:
-                raw = response.read(8 * 1024 * 1024 + 1)
-            if len(raw) > 8 * 1024 * 1024:
-                raise GalaxyError('Resposta do Galaxy maior que o limite suportado.')
-            result = json.loads(raw)
-        except HTTPError as error:
-            if error.code in (401, 403):
-                message = 'Acesso negado. Verifique a chave e a permissão de administrador no Galaxy.'
-            elif 300 <= error.code < 400:
-                message = 'Galaxy redirecionou a requisição. Informe a URL final correta; a chave não foi encaminhada.'
-            else:
-                message = f'Galaxy respondeu HTTP {error.code}. Consulte os logs do servidor.'
-            raise GalaxyError(message) from None
-        except (URLError, TimeoutError, socket.timeout, OSError):
-            raise GalaxyError('Falha de conexão ou timeout. O Galaxy pode continuar a operação; atualize o estado antes de tentar novamente.') from None
-        except (ValueError, UnicodeError):
-            raise GalaxyError('A resposta não é JSON válido da API do Galaxy.') from None
-        if isinstance(result, dict) and (result.get('status') == 'error' or result.get('err_msg')):
-            raise GalaxyError('Galaxy informou uma falha. Consulte os logs do servidor e atualize a lista.')
-        return result
-
     def revisions(self, name: str, owner: str) -> list[str]:
-        ToolSpec(name, owner, '0' * 12).validate()
-        result = self._request('GET', '/api/repositories/get_ordered_installable_revisions?'
-                               + urlencode({'name': name, 'owner': owner}), public=True)
-        if not isinstance(result, list) or not result or not all(
-                isinstance(v, str) and re.fullmatch(r'(?:[0-9a-f]{12}|[0-9a-f]{40})', v) for v in result):
-            raise GalaxyError('Nenhuma revisão instalável válida foi encontrada no Tool Shed.')
-        return result
+        shed = ToolShedClient(timeout=self.timeout)
+        shed._opener = self._opener
+        return shed.revisions(name, owner)
 
     def connect(self) -> list[Repository]:
         user = self._request('GET', '/api/users/current')
@@ -189,3 +190,66 @@ class GalaxyClient:
             self._request('DELETE', '/api/tool_shed_repositories/' + quote(selected.id, safe='')
                           + '?' + urlencode({'remove_from_disk': 'true'}))
             return self.repositories()
+
+
+@dataclass(frozen=True)
+class SearchHit:
+    name: str
+    owner: str
+    description: str
+
+
+@dataclass(frozen=True)
+class SearchPage:
+    query: str
+    page: int
+    page_size: int
+    total: int
+    hits: tuple[SearchHit, ...]
+
+    @property
+    def has_next(self) -> bool:
+        return self.page * self.page_size < self.total
+
+
+class ToolShedClient(_JSONTransport):
+    """Catálogo público; nunca contém a chave de API do Galaxy."""
+
+    def __init__(self, timeout: float = 30):
+        self.url = TOOL_SHED
+        self._key = None
+        self.timeout = timeout
+        self._opener = build_opener(NoRedirect())
+
+    def revisions(self, name: str, owner: str) -> list[str]:
+        ToolSpec(name, owner, '0' * 12).validate()
+        result = self._request('GET', '/api/repositories/get_ordered_installable_revisions?'
+                               + urlencode({'name': name, 'owner': owner}), public=True)
+        if not isinstance(result, list) or not result or not all(
+                isinstance(v, str) and re.fullmatch(r'(?:[0-9a-f]{12}|[0-9a-f]{40})', v) for v in result):
+            raise GalaxyError('Nenhuma revisão instalável válida foi encontrada no Tool Shed.')
+        return result
+
+    def search(self, query: str, page: int = 1) -> SearchPage:
+        query = query.strip()
+        if not query or len(query) > 200 or any(ord(c) < 32 for c in query) or page < 1:
+            raise GalaxyError('Informe uma busca de 1 a 200 caracteres e uma página válida.')
+        size = 10
+        result = self._request('GET', '/api/repositories?'
+                               + urlencode({'q': query, 'page': page, 'page_size': size}), public=True)
+        try:
+            total = int(result['total_results'])
+            hits = []
+            if total < 0 or not isinstance(result['hits'], list) or len(result['hits']) > size:
+                raise ValueError
+            for hit in result['hits']:
+                repo = hit['repository']
+                name, owner = repo['name'], repo['repo_owner_username']
+                description = repo.get('description', '')
+                if not all(isinstance(v, str) for v in (name, owner, description)):
+                    raise ValueError
+                ToolSpec(name, owner, '0' * 12).validate()
+                hits.append(SearchHit(name, owner, description))
+        except (KeyError, TypeError, ValueError):
+            raise GalaxyError('Formato inesperado dos resultados de busca do Tool Shed.') from None
+        return SearchPage(query, page, size, total, tuple(hits))
