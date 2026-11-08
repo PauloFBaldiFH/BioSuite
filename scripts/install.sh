@@ -20,5 +20,5 @@ if [[ ! -x "$project_dir/.venv/bin/python" ]]; then
 fi
 "$project_dir/.venv/bin/python" -m pip install --disable-pip-version-check "$project_dir"
 "$project_dir/.venv/bin/biosuite" --help
-printf '\nPainel instalado. Abra com: %q\n' "$project_dir/.venv/bin/biosuite"
+printf '\nPainel instalado. Abra com: %q\n' "$project_dir/.venv/bin/biosuite-config"
 printf 'Este bootstrap não instala Galaxy, PostgreSQL ou ferramentas científicas.\n'

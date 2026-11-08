@@ -90,16 +90,19 @@ biosuite_main() {
     [[ "$prefix" == /* && "$bin_dir" == /* && "$prefix" != / ]] || {
         echo 'Use caminhos absolutos e um prefixo diferente de /.' >&2; return 2;
     }
-    local launcher="$bin_dir/biosuite"
-    if [[ -e "$launcher" || -L "$launcher" ]]; then
-        if [[ -L "$launcher" ]] || ! grep -Fxq '# BioSuite managed launcher' "$launcher"; then
-            echo "Não vou substituir o arquivo existente: $launcher" >&2; return 1
+    local launcher command_name
+    for command_name in biosuite biosuite-config; do
+        launcher="$bin_dir/$command_name"
+        if [[ -e "$launcher" || -L "$launcher" ]]; then
+            if [[ -L "$launcher" ]] || ! grep -Fxq '# BioSuite managed launcher' "$launcher"; then
+                echo "Não vou substituir o arquivo existente: $launcher" >&2; return 1
+            fi
+            # Um mesmo comando não pode ser redirecionado silenciosamente para outro prefixo.
+            grep -Fxq "# Prefix: $prefix" "$launcher" || {
+                echo "O comando $launcher pertence a outro prefixo. Escolha outro --bin-dir." >&2; return 1;
+            }
         fi
-        # Um mesmo comando não pode ser redirecionado silenciosamente para outro prefixo.
-        grep -Fxq "# Prefix: $prefix" "$launcher" || {
-            echo "O comando $launcher pertence a outro prefixo. Escolha outro --bin-dir." >&2; return 1;
-        }
-    fi
+    done
     if [[ -e "$prefix/current" && ! -L "$prefix/current" ]]; then
         echo "O caminho $prefix/current já existe e não é um link gerenciado." >&2; return 1
     fi
@@ -147,23 +150,27 @@ biosuite_main() {
     "$biosuite_release/bin/biosuite" --version
     "$biosuite_release/bin/biosuite" doctor >/dev/null
 
-    biosuite_launcher_tmp=$(mktemp "$bin_dir/.biosuite.XXXXXXXX")
-    {
-        printf '#!/usr/bin/env bash\n# BioSuite managed launcher\n# Prefix: %s\n' "$prefix"
-        printf 'exec %q "$@"\n' "$prefix/current/bin/biosuite"
-    } >"$biosuite_launcher_tmp"
-    chmod 755 "$biosuite_launcher_tmp"
+    for command_name in biosuite biosuite-config; do
+        launcher="$bin_dir/$command_name"
+        biosuite_launcher_tmp=$(mktemp "$bin_dir/.biosuite.XXXXXXXX")
+        {
+            printf '#!/usr/bin/env bash\n# BioSuite managed launcher\n# Prefix: %s\n' "$prefix"
+            printf 'exec %q "$@"\n' "$prefix/current/bin/biosuite"
+        } >"$biosuite_launcher_tmp"
+        chmod 755 "$biosuite_launcher_tmp"
+        mv -fT -- "$biosuite_launcher_tmp" "$launcher"
+        biosuite_launcher_tmp=''
+    done
     biosuite_pending_link="$prefix/.current.${biosuite_release##*/}"
     ln -s -- "$biosuite_release" "$biosuite_pending_link"
     # O launcher existente aponta sempre para current, que só troca após a validação.
-    mv -fT -- "$biosuite_launcher_tmp" "$launcher"
-    biosuite_launcher_tmp=''
     mv -fT -- "$biosuite_pending_link" "$prefix/current"
     biosuite_pending_link=''
     biosuite_activated=1
+    launcher="$bin_dir/biosuite-config"
     printf '\nBioSuite instalado. Para abrir novamente: %s\n' "$launcher"
     case ":$PATH:" in
-        *":$bin_dir:"*) echo 'Você também pode usar: biosuite' ;;
+        *":$bin_dir:"*) echo 'Você também pode usar: biosuite-config (ou biosuite)' ;;
         *) printf 'Para usar o nome curto nesta sessão: export PATH=%q:"$PATH"\n' "$bin_dir" ;;
     esac
     echo 'Este bootstrap não instala o Galaxy nem ferramentas científicas automaticamente.'
