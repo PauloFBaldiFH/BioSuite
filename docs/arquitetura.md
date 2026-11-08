@@ -2,7 +2,8 @@
 
 Proposta baseada nos requisitos do projeto e na leitura dos repositórios
 Koha Nexus e Galaxy. Estão implementados o painel, o diagnóstico, a gestão de
-repositórios e a instalação nativa inicial Galaxy/PostgreSQL. API e interface
+repositórios e a instalação Galaxy/PostgreSQL nativa ou Docker, além de manutenção APT e
+atualização do painel. O cliente e broker Cloudflare têm testes locais. API e interface
 foram verificadas em Debian 13 e Ubuntu 24.04. Os demais componentes e a execução
 automática via systemd ainda têm validações pendentes; veja o
 [guia da instalação nativa](instalacao-nativa.md).
@@ -25,7 +26,7 @@ automática via systemd ainda têm validações pendentes; veja o
 
 O bootstrap do painel cobre Ubuntu 22.04/24.04 e Debian 12/13, em x86_64,
 com instalação por um comando e launcher permanente. Os testes Linux usam
-containers apenas para isolar as distribuições: a instalação final é nativa.
+containers apenas para isolar as distribuições: a instalação final permite escolher nativo ou Docker.
 A mesma matriz é alvo da instalação Galaxy. Debian 13 e Ubuntu 24.04 tiveram
 validação funcional em primeiro plano; ciclo systemd, versões mais antigas e
 ferramentas científicas exigem validação própria.
@@ -135,9 +136,10 @@ O broker consultado documenta testes locais com uma API Cloudflare simulada
 e ausência de validação em conta real. É uma referência de implementação,
 não evidência de operação em produção.
 
-O domínio do BioSuite ainda precisa ser definido. O subdomínio pode ser gratuito
+O domínio inicial do BioSuite foi autorizado pelo proprietário. O subdomínio pode ser gratuito
 para o usuário final, enquanto domínio, conta e recursos do serviço central
-precisam ser mantidos pelo projeto. Não utilizar `koha.nexus` como padrão.
+precisam ser mantidos pelo projeto. Por decisão do proprietário, a primeira implantação usará `koha.nexus`,
+com broker novo `biosuite-broker.koha.nexus` e nomes `bio-<nome>`.
 Não publicar dados nem endpoints administrativos automaticamente.
 Galaxy exige análise de autenticação, dados sensíveis e limites de upload do
 Cloudflare; arquivos grandes precisarão de um caminho de transferência adequado.
@@ -169,5 +171,10 @@ incrementais permitem validar cada integração antes de anunciar o conjunto
 como pronto. Publicação do broker e uso de serviços reais dependem da definição
 do domínio e configuração segura das credenciais, sem valores em chat.
 
-Se código do Nexus for incorporado, preservar os avisos e cumprir sua licença
-GPLv3; este levantamento ainda não incorpora código daquele projeto.
+O broker incorpora código GPLv3 do Nexus, commit
+`d76218203b79c2a9fecfac923444c356fe175cd6`, preservando a licença e com
+proveniência em [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
+A implantação proposta usa prefixos de propriedade próprios, D1, filas e
+Worker separados; o teste de reconciliação mantém recursos Koha intactos.
+Veja [guia de implantação](../broker/README.md) e
+[manutenção/Docker/conexão](manutencao-e-docker.md).

@@ -11,6 +11,8 @@ from textual.widgets import Button, Footer, Header, Static
 from biosuite.preflight import inspect_machine
 from biosuite.modules import ModulePanel
 from biosuite.native_panel import NativePanel
+from biosuite.update_panel import UpdatePanel
+from biosuite.connection_panel import ConnectionPanel
 
 
 class BioSuiteApp(App):
@@ -43,21 +45,23 @@ class BioSuiteApp(App):
                 yield Static('BIO SUITE\nSeu Galaxy, sob controle.', id='brand')
                 for label, name in [('Início', 'home'), ('Instalação', 'install'),
                                     ('Ferramentas', 'tools'), ('Backups', 'backup'),
-                                    ('Conexão', 'connection'), ('Diagnóstico', 'doctor')]:
+                                    ('Conexão', 'connection'), ('Atualizações', 'updates'), ('Diagnóstico', 'doctor')]:
                     yield Button(label, id=name)
             with VerticalScroll(id='content'):
-                yield Static('Galaxy nativo • ferramentas sob demanda', id='phase')
+                yield Static('Galaxy • ferramentas sob demanda', id='phase')
                 yield Static('', id='page-title')
                 yield Static('', id='page-body')
                 yield ModulePanel(id='module-panel')
                 yield NativePanel(id='native-panel')
+                yield UpdatePanel(id='update-panel')
+                yield ConnectionPanel(id='connection-panel')
         yield Footer()
 
     def on_mount(self) -> None:
         self.show_page('home')
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id in ('home', 'install', 'tools', 'backup', 'connection', 'doctor'):
+        if event.button.id in ('home', 'install', 'tools', 'backup', 'connection', 'updates', 'doctor'):
             self.show_page(event.button.id)
 
     def action_diagnose(self) -> None:
@@ -67,7 +71,7 @@ class BioSuiteApp(App):
         self.show_page('install')
 
     def action_quit(self) -> None:
-        if self.query_one('#native-panel', NativePanel).busy:
+        if any(self.query_one(selector).busy for selector in ('#native-panel', '#update-panel', '#connection-panel')):
             self.notify('Aguarde a operação em andamento e confira os logs antes de sair.', severity='warning')
         else:
             self.exit()
@@ -75,14 +79,16 @@ class BioSuiteApp(App):
     def show_page(self, name: str) -> None:
         self.query_one('#module-panel').display = name == 'tools'
         self.query_one('#native-panel').display = name == 'install'
+        self.query_one('#update-panel').display = name == 'updates'
+        self.query_one('#connection-panel').display = name == 'connection'
         if name == 'install':
             title = 'Instalação • planejar antes de alterar'
             machine = inspect_machine(self.storage)
-            body = ('PLANO NATIVO • Galaxy 26.1.2 + PostgreSQL\n'
+            body = ('PLANO DE INSTALAÇÃO • Galaxy 26.1.2 + PostgreSQL\n'
                     f'{machine.distribution} {machine.version} • {machine.architecture}\n'
                     f'RAM: {machine.memory_gib} GiB • Disco livre medido: {machine.free_gib} GiB\n'
                     'Informe o administrador e a porta. Revise o plano antes de confirmar; '
-                    'a instalação exige privilégios de administrador.')
+                    'o modo nativo exige administrador; Docker exige acesso ao Engine.')
         elif name == 'doctor':
             title = 'Diagnóstico • leitura local atualizada'
             body = ('Este levantamento não testa a saúde do Galaxy ou do PostgreSQL.\n\n'
@@ -91,9 +97,10 @@ class BioSuiteApp(App):
             title, body = {
                 'home': ('Bem-vindo ao BioSuite',
                          'Uma central para instalar, acompanhar e manter seu Galaxy.\n\n'
-                         'Disponível agora\n• Diagnóstico da máquina\n• Instalação nativa do Galaxy e PostgreSQL\n'
+                         'Disponível agora\n• Diagnóstico da máquina\n• Galaxy nativo ou Docker\n• Atualizações do painel e APT\n'
                          '• Gestão de módulos em um Galaxy existente\n\n'
-                         'Em desenvolvimento\n• Backup e restauração\n• Acesso remoto\n\n'
+                         'Conexão pública requer o broker BioSuite configurado no Cloudflare.\n'
+                         'Em desenvolvimento\n• Backup e restauração\n\n'
                          'Comece por Diagnóstico e consulte o plano em Instalação.'),
                 'tools': ('Ferramentas • módulos do Galaxy',
                           'Atalhos por área e busca paginada no catálogo público do Tool Shed.\n'
@@ -107,11 +114,11 @@ class BioSuiteApp(App):
                            'rclone permitirá cópia para um destino escolhido por você.\n'
                            'Nenhum backup ou upload está sendo realizado.'),
                 'connection': ('Conexão • Cloudflare Tunnel',
-                               'Integração em desenvolvimento.\n\n'
-                               'O domínio e o broker do BioSuite ainda precisam ser configurados.\n'
-                               'O serviço terá identidade separada do Koha Nexus.\n'
-                               'A publicação dependerá de uma ação explícita.\n'
-                               'Nenhum tunnel ou subdomínio foi criado.'),
+                               'Domínio koha.nexus com namespace bio- e broker isolado.\n'
+                               'Nenhum tunnel ou subdomínio é criado apenas por abrir esta tela.'),
+                'updates': ('Atualizações • painel e sistema operacional',
+                            'Atualize as listas APT, revise o upgrade e confirme antes de aplicar. '
+                            'A atualização do painel usa um commit definido do canal main e preserva a versão anterior.'),
             }[name]
         self.query_one('#page-title', Static).update(Text(title))
         self.query_one('#page-body', Static).update(Text(body))
