@@ -1,0 +1,537 @@
+// Public API used by the Koha installer.
+//
+// Enrollment follows the device-authorization pattern (RFC 8628): the panel
+// asks for a code, shows the verification link as QR / browser / link, and
+// polls. With AUTO_APPROVE=true (the default) every request is approved on
+// the spot under the first free valid name: no review, no word filter. With
+// AUTO_APPROVE=false an admin approves each request (admin.ts).
+//
+// After enrollment every call is signed with the install's Ed25519 key.
+
+import { audit, cfApi, getLibrary, provisioner, slugAvailable } from "./db";
+import type { Env, JobRow, LibraryRow } from "./env";
+import { now } from "./env";
+import { pbkdf2, randomBytes, randomToken, sha256Hex, toBase64 } from "./crypto";
+import { HttpError, json, parseJson, str } from "./http";
+import {
+  repositoryFits,
+  REPOSITORY_SUFFIX,
+  DSPACE_ORIGIN_PORT,
+  collectionFits,
+  collectionSuffix,
+  hostnamesFor,
+  maxSlugLength,
+  parseServices,
+  publishedHostnames,
+  SERVICE_NAMES,
+  servicesText,
+  slugCandidates,
+  slugify,
+  validateSlug,
+} from "./names";
+import type { Services } from "./names";
+import { parseCidr } from "./netaddr";
+import { checkSignedRequest, isValidPublicKey } from "./signature";
+
+const ENROLLMENT_TTL_SECONDS = 24 * 3600;
+const POLL_INTERVAL_SECONDS = 10;
+const USER_CODE_ALPHABET = "BCDFGHJKLMNPQRSTVWXZ"; // no vowels: no accidental words
+const EMAIL_RE = /^[^\s@<>"']{1,64}@[a-z0-9.-]{1,190}\.[a-z]{2,24}$/i;
+
+export function userCode(): string {
+  const b = randomBytes(8);
+  const chars = [...b].map((x) => USER_CODE_ALPHABET[x % USER_CODE_ALPHABET.length]).join("");
+  return `${chars.slice(0, 4)}-${chars.slice(4)}`;
+}
+
+function clientIp(request: Request): string {
+  return request.headers.get("CF-Connecting-IP") ?? "unknown";
+}
+
+async function limit(rl: RateLimit, key: string): Promise<void> {
+  if (!(await rl.limit({ key })).success) throw new HttpError(429, "too many requests, try again in a minute");
+}
+
+// ---- Enrollment ----
+
+interface StartBody {
+  origin_port?: unknown;
+  institution_name?: unknown;
+  contact_email?: unknown;
+  cnpj?: unknown;
+  requested_name?: unknown;
+  services?: unknown;
+}
+
+/** ["koha"], ["tainacan"] or both; unset = ["koha"] (installers before Tainacan). */
+export function readServices(value: unknown): Services {
+  if (value === undefined || value === null) return { koha: true, tainacan: false };
+  if (!Array.isArray(value) || !value.length || value.length > SERVICE_NAMES.length ||
+      value.some((v) => typeof v !== "string" || !(SERVICE_NAMES as readonly string[]).includes(v))) {
+    throw new HttpError(400, `services must be a list of ${SERVICE_NAMES.join(", ")}`);
+  }
+  return { koha: value.includes("koha"), tainacan: value.includes("tainacan"), ...(value.includes("dspace") ? {dspace:true} : {}) };
+}
+
+// What this broker can publish, for the installer to offer (or not) the
+// free address of Tainacan before asking anything.
+export async function repositoryEnabled(env:Env):Promise<boolean> {
+  if (env.DSPACE_ENABLED !== "true") return false;
+  try {
+    const feature=await env.DB.prepare("SELECT value FROM broker_features WHERE name='dspace'").first<{value:string}>();
+    return feature?.value === "1";
+  } catch {return false;}
+}
+export async function capabilities(env: Env): Promise<Response> {
+  if (env.APPLICATION === "galaxy") return json({application:"galaxy",services:["galaxy"],origin_port_configurable:true});
+  const enabled=await repositoryEnabled(env);
+  return json({services:SERVICE_NAMES.filter(n=>n!=="dspace"||enabled),collection_suffix:collectionSuffix(env),
+    ...(enabled ? {repository_suffix:env.DSPACE_SUFFIX ?? REPOSITORY_SUFFIX,repository_origin_port:DSPACE_ORIGIN_PORT} : {})});
+}
+
+export async function deviceStart(request: Request, env: Env, body: ArrayBuffer): Promise<Response> {
+  const ip = clientIp(request);
+  await limit(env.RL_DEVICE, ip);
+  const b = parseJson<StartBody>(body);
+  const institution = str(b.institution_name, "institution_name", { min: 3, max: 200 });
+  const email = str(b.contact_email, "contact_email", { max: 254, re: EMAIL_RE }).toLowerCase();
+  const cnpj = typeof b.cnpj === "string" ? b.cnpj.replace(/\D/g, "") : "";
+  if (cnpj && cnpj.length !== 14) throw new HttpError(400, "cnpj must have 14 digits");
+  const requested = str(b.requested_name, "requested_name", { max: 100, optional: true });
+  if (env.APPLICATION === "galaxy" && b.services !== undefined &&
+      (!Array.isArray(b.services) || b.services.length !== 1 || b.services[0] !== "galaxy"))
+    throw new HttpError(400,"This broker publishes Galaxy only");
+  const services = env.APPLICATION === "galaxy" ? {koha:true,tainacan:false} : readServices(b.services);
+  const originPort = env.APPLICATION === "galaxy" ? b.origin_port ?? 8080 : 8080;
+  if (typeof originPort !== "number" || !Number.isInteger(originPort) || originPort < 1024 || originPort > 65535)
+    throw new HttpError(400,"origin_port must be an integer between 1024 and 65535");
+  const enabled=await repositoryEnabled(env);
+  if(services.dspace && !enabled) throw new HttpError(409,"repository addresses are not enabled on this broker");
+
+  const opts = { prefix: env.NAME_PREFIX, staffSuffix: env.STAFF_SUFFIX, collectionSuffix: collectionSuffix(env), repositorySuffix: enabled ? (env.DSPACE_SUFFIX ?? REPOSITORY_SUFFIX) : "" };
+  const max = maxSlugLength(opts.prefix, opts.staffSuffix, opts.collectionSuffix, opts.repositorySuffix);
+  let slug = slugify(requested || institution).slice(0, max).replace(/-+$/, "");
+
+  const deviceCode = randomToken(32);
+  const code = userCode();
+  const t = now();
+  let status: "pending" | "approved" = "pending";
+  if (env.AUTO_APPROVE !== "false") {
+    // Instant approval: the first free valid name. Only the technical
+    // reserved names (www, join, broker, ...) are never handed out.
+    const auto = { ...opts, allowBlocked: true };
+    const candidates = [...slugCandidates(requested, institution, max), `biblioteca-${userCode().replace("-", "").toLowerCase()}`];
+    for (const c of candidates) {
+      if (validateSlug(c, auto).ok && (await slugAvailable(env, c))) {
+        slug = c;
+        status = "approved";
+        break;
+      }
+    }
+  }
+  await env.DB.prepare(
+    `INSERT INTO enrollments (device_code_hash, user_code, status, institution_name, contact_email, cnpj,
+       requested_slug, approved_slug, services, client_ip_hash, created_at, expires_at, decided_at, origin_port)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(
+      await sha256Hex(deviceCode),
+      code,
+      status,
+      institution,
+      email,
+      cnpj || null,
+      slug,
+      status === "approved" ? slug : null,
+      servicesText(services),
+      await sha256Hex(`${ip}|${env.ZONE_NAME}`),
+      t,
+      t + ENROLLMENT_TTL_SECONDS,
+      status === "approved" ? t : null,
+      originPort,
+    )
+    .run();
+  await audit(env, "public", "enrollment.start", null, { user_code: code, slug, status, services: servicesText(services) });
+
+  return json({
+    device_code: deviceCode,
+    user_code: code,
+    verification_uri: `https://${env.BROKER_HOST}/join?c=${code}`,
+    suggested_slug: slug,
+    expires_in: ENROLLMENT_TTL_SECONDS,
+    interval: POLL_INTERVAL_SECONDS,
+    status,
+    services: env.APPLICATION === "galaxy" ? ["galaxy"] : SERVICE_NAMES.filter((n) => services[n]),
+    ...(status === "approved" ? { hostnames: publishedHostnames(slug, env, services) } : {}),
+  });
+}
+
+interface EnrollmentRow {
+  status: "pending" | "approved" | "denied" | "consumed";
+  approved_slug: string | null;
+  services: string;
+  expires_at: number;
+}
+
+export async function devicePoll(request: Request, env: Env, body: ArrayBuffer): Promise<Response> {
+  await limit(env.RL_API, clientIp(request));
+  const b = parseJson<{ device_code?: unknown }>(body);
+  const deviceCode = str(b.device_code, "device_code", { max: 64 });
+  const row = await env.DB.prepare("SELECT status, approved_slug, services, expires_at FROM enrollments WHERE device_code_hash = ?")
+    .bind(await sha256Hex(deviceCode))
+    .first<EnrollmentRow>();
+  if (!row) throw new HttpError(404, "unknown device code");
+  if (row.expires_at <= now() && row.status !== "consumed") return json({ status: "expired" });
+  const out: Record<string, unknown> = { status: row.status, interval: POLL_INTERVAL_SECONDS };
+  if (row.status === "approved" && row.approved_slug) {
+    out.hostnames = publishedHostnames(row.approved_slug, env, parseServices(row.services));
+  }
+  return json(out);
+}
+
+export async function enroll(request: Request, env: Env, body: ArrayBuffer): Promise<Response> {
+  await limit(env.RL_API, clientIp(request));
+  const b = parseJson<{ device_code?: unknown; public_key?: unknown }>(body);
+  const deviceCode = str(b.device_code, "device_code", { max: 64 });
+  const publicKey = str(b.public_key, "public_key", { max: 64 });
+  if (!isValidPublicKey(publicKey)) throw new HttpError(400, "public_key must be a base64 raw Ed25519 key (32 bytes)");
+
+  // Optional global circuit breaker: MAX_LIBRARIES_PER_DAY above 0 pauses
+  // enrollment after that many new libraries in 24 hours. 0 turns it off.
+  const t = now();
+  const cap = Number(env.MAX_LIBRARIES_PER_DAY || "0");
+  if (cap > 0) {
+    const recent = await env.DB.prepare("SELECT COUNT(*) AS n FROM libraries WHERE created_at > ?")
+      .bind(t - 86400)
+      .first<{ n: number }>();
+    if ((recent?.n ?? 0) >= cap) {
+      await audit(env, "system", "circuit_breaker.open", null, { recent: recent?.n });
+      throw new HttpError(503, "new registrations are paused, try again later");
+    }
+  }
+
+  const hash = await sha256Hex(deviceCode);
+  const enrollment = await env.DB.prepare(
+    `UPDATE enrollments SET status = 'consumed', consumed_at = ?1
+     WHERE device_code_hash = ?2 AND status = 'approved' AND expires_at > ?1
+     RETURNING institution_name, contact_email, cnpj, approved_slug, services, origin_port`,
+  )
+    .bind(t, hash)
+    .first<{ institution_name: string; contact_email: string; cnpj: string | null; approved_slug: string; services: string; origin_port:number }>();
+  if (!enrollment) throw new HttpError(409, "this request is not approved, has expired or was already used");
+
+  const libraryId = crypto.randomUUID();
+  const jobId = crypto.randomUUID();
+  try {
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO libraries (id, slug, status, institution_name, contact_email, cnpj, public_key, services, created_at, updated_at, origin_port)
+         VALUES (?, ?, 'provisioning', ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(
+        libraryId,
+        enrollment.approved_slug,
+        enrollment.institution_name,
+        enrollment.contact_email,
+        enrollment.cnpj,
+        publicKey,
+        servicesText(parseServices(enrollment.services)),
+        t,
+        t,
+        enrollment.origin_port,
+      ),
+      env.DB.prepare(
+        "INSERT INTO jobs (id, library_id, kind, state, created_at, updated_at) VALUES (?, ?, 'provision', 'queued', ?, ?)",
+      ).bind(jobId, libraryId, t, t),
+    ]);
+  } catch {
+    // Most likely the name was taken in between: give the enrollment back.
+    await env.DB.prepare("UPDATE enrollments SET status = 'approved', consumed_at = NULL WHERE device_code_hash = ?")
+      .bind(hash)
+      .run();
+    throw new HttpError(409, "the approved name is no longer available, ask for a new one");
+  }
+  await env.PROVISION_QUEUE.send({ jobId });
+  await audit(env, `library:${libraryId}`, "library.enroll", libraryId, { slug: enrollment.approved_slug, services: enrollment.services });
+  return json(
+    {
+      library_id: libraryId,
+      job_id: jobId,
+      hostnames: publishedHostnames(enrollment.approved_slug, env, parseServices(enrollment.services)),
+    },
+    202,
+  );
+}
+
+// Human-facing page behind the QR code: shows the status of the request.
+export async function joinPage(request: Request, env: Env): Promise<Response> {
+  await limit(env.RL_API, clientIp(request));
+  const code = new URL(request.url).searchParams.get("c") ?? "";
+  const row = /^[A-Z]{4}-[A-Z]{4}$/.test(code)
+    ? await env.DB.prepare("SELECT status, expires_at FROM enrollments WHERE user_code = ?").bind(code).first<EnrollmentRow>()
+    : null;
+  const status = !row ? "unknown" : row.expires_at <= now() && row.status !== "consumed" ? "expired" : row.status;
+  const text: Record<string, string> = {
+    unknown: "This request code was not found. Check the code shown in the BioSuite panel.",
+    expired: "This request has expired. Start again from the BioSuite panel.",
+    pending: "Your request was received and is waiting for review. The BioSuite panel continues on its own once it is approved.",
+    approved: "Your request was approved. Go back to the BioSuite panel to finish.",
+    denied: "This request was not approved.",
+    consumed: "This request was already used to set up a library.",
+  };
+  const html = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>BioSuite address</title><body style="font-family:system-ui;max-width:36rem;margin:3rem auto;padding:0 1rem"><h1>BioSuite address</h1><p><strong>${status === "unknown" ? "" : code}</strong></p><p>${text[status]}</p>`;
+  return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+}
+
+// ---- Signed endpoints ----
+
+async function signedLibrary(request: Request, env: Env, body: ArrayBuffer): Promise<LibraryRow> {
+  const res = await checkSignedRequest(request.method, new URL(request.url), request.headers, body, {
+    now: now(),
+    lookupKey: async (id) =>
+      (
+        await env.DB.prepare("SELECT public_key FROM libraries WHERE id = ? AND status NOT IN ('deleted', 'failed')")
+          .bind(id)
+          .first<{ public_key: string }>()
+      )?.public_key ?? null,
+    consumeNonce: async (id, nonce, expiresAt) =>
+      (
+        await env.DB.prepare("INSERT INTO nonces (library_id, nonce, expires_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING")
+          .bind(id, nonce, expiresAt)
+          .run()
+      ).meta.changes === 1,
+  });
+  if (!res.ok) throw new HttpError(res.status, res.error);
+  await limit(env.RL_API, `lib:${res.libraryId}`);
+  const lib = await getLibrary(env, res.libraryId);
+  if (!lib) throw new HttpError(401, "invalid signature");
+  return lib;
+}
+
+export async function getJob(request: Request, env: Env, body: ArrayBuffer, jobId: string): Promise<Response> {
+  const lib = await signedLibrary(request, env, body);
+  const job = await env.DB.prepare("SELECT * FROM jobs WHERE id = ? AND library_id = ?").bind(jobId, lib.id).first<JobRow>();
+  if (!job) throw new HttpError(404, "job not found");
+  return json({ id: job.id, kind: job.kind, state: job.state, error: job.error, library_status: lib.status });
+}
+
+export async function getLibraryInfo(request: Request, env: Env, body: ArrayBuffer): Promise<Response> {
+  const lib = await signedLibrary(request, env, body);
+  return json({
+    id: lib.id,
+    origin_port: lib.origin_port ?? 8080,
+    slug: lib.slug,
+    status: lib.status,
+    services: env.APPLICATION === "galaxy" ? ["galaxy"] : SERVICE_NAMES.filter((n) => parseServices(lib.services)[n]),
+    hostnames: publishedHostnames(lib.slug, env, parseServices(lib.services)),
+    staff_remote_access: Boolean(lib.staff_pass_hash),
+    staff_allow_cidrs: lib.staff_allow_cidrs ? JSON.parse(lib.staff_allow_cidrs) : [],
+    public_listing: lib.public_listing === 1,
+  });
+}
+
+// The library chooses whether its catalog appears on the public list.
+export async function putListing(request: Request, env: Env, body: ArrayBuffer): Promise<Response> {
+  const lib = await signedLibrary(request, env, body);
+  const b = parseJson<{ public?: unknown }>(body);
+  if (typeof b.public !== "boolean") throw new HttpError(400, "public must be true or false");
+  if (b.public && !parseServices(lib.services).koha) throw new HttpError(409, "the public list is of Koha catalogs");
+  await setListing(env, lib.id, b.public, `library:${lib.id}`);
+  return json({ public_listing: b.public });
+}
+
+export async function setListing(env: Env, libraryId: string, visible: boolean, actor: string): Promise<void> {
+  await env.DB.prepare("UPDATE libraries SET public_listing = ?, updated_at = ? WHERE id = ?").bind(visible ? 1 : 0, now(), libraryId).run();
+  await audit(env, actor, visible ? "listing.on" : "listing.off", libraryId);
+}
+
+// The tunnel token is fetched live from Cloudflare and never stored by the broker.
+export async function getTunnelToken(request: Request, env: Env, body: ArrayBuffer): Promise<Response> {
+  const lib = await signedLibrary(request, env, body);
+  if (!lib.tunnel_id || (lib.status !== "active" && lib.status !== "suspended")) {
+    throw new HttpError(409, `library is ${lib.status}`);
+  }
+  const token = await cfApi(env).getTunnelToken(lib.tunnel_id);
+  await audit(env, `library:${lib.id}`, "tunnel_token.fetch", lib.id);
+  return json({ tunnel_token: token });
+}
+
+export async function heartbeat(request: Request, env: Env, body: ArrayBuffer): Promise<Response> {
+  const lib = await signedLibrary(request, env, body);
+  const b = parseJson<{ koha_version?: unknown; installer_version?: unknown }>(body);
+  const koha = str(b.koha_version, "koha_version", { max: 32, optional: true });
+  const installer = str(b.installer_version, "installer_version", { max: 32, optional: true });
+  await env.DB.prepare("UPDATE libraries SET koha_version = ?, installer_version = ?, last_heartbeat = ? WHERE id = ?")
+    .bind(koha || null, installer || null, now(), lib.id)
+    .run();
+  return json({ status: lib.status });
+}
+
+export async function putStaffCredentials(request: Request, env: Env, body: ArrayBuffer): Promise<Response> {
+  const lib = await signedLibrary(request, env, body);
+  if (!parseServices(lib.services).koha) throw new HttpError(409, "this library does not publish Koha");
+  const b = parseJson<{ username?: unknown; password?: unknown; allow_cidrs?: unknown }>(body);
+  const username = str(b.username, "username", { min: 3, max: 64, re: /^[A-Za-z0-9._@-]+$/ });
+  if (typeof b.password !== "string" || b.password.length < 12 || b.password.length > 256) {
+    throw new HttpError(400, "password must have 12 to 256 characters");
+  }
+  const cidrs = b.allow_cidrs ?? [];
+  if (!Array.isArray(cidrs) || cidrs.length > 20 || cidrs.some((c) => typeof c !== "string" || !parseCidr(c))) {
+    throw new HttpError(400, "allow_cidrs must be a list of up to 20 CIDR ranges");
+  }
+  const iterations = Number(env.PBKDF2_ITERATIONS || "20000");
+  const salt = randomBytes(16);
+  const hash = await pbkdf2(b.password, salt, iterations);
+  await env.DB.prepare(
+    `UPDATE libraries SET staff_user = ?, staff_pass_hash = ?, staff_pass_salt = ?, staff_pass_iter = ?,
+       staff_cred_version = staff_cred_version + 1, staff_allow_cidrs = ?, updated_at = ? WHERE id = ?`,
+  )
+    .bind(username, hash, toBase64(salt), iterations, cidrs.length ? JSON.stringify(cidrs) : null, now(), lib.id)
+    .run();
+  await audit(env, `library:${lib.id}`, "staff_access.set", lib.id, { cidrs: cidrs.length });
+  return json({ staff_remote_access: true, hostname: hostnamesFor(lib.slug, env).staff });
+}
+
+export async function deleteStaffCredentials(request: Request, env: Env, body: ArrayBuffer): Promise<Response> {
+  const lib = await signedLibrary(request, env, body);
+  await env.DB.prepare(
+    `UPDATE libraries SET staff_user = NULL, staff_pass_hash = NULL, staff_pass_salt = NULL, staff_pass_iter = NULL,
+       staff_cred_version = staff_cred_version + 1, updated_at = ? WHERE id = ?`,
+  )
+    .bind(now(), lib.id)
+    .run();
+  await audit(env, `library:${lib.id}`, "staff_access.off", lib.id);
+  return json({ staff_remote_access: false });
+}
+
+// The library adds Tainacan to its address, or takes it out. Koha is not
+// changed here: a library that publishes only Tainacan keeps it (removing
+// the address is DELETE /v1/library).
+export async function putServices(request: Request, env: Env, body: ArrayBuffer): Promise<Response> {
+  const lib = await signedLibrary(request, env, body);
+  const b = parseJson<{ tainacan?: unknown; dspace?: unknown }>(body);
+  if ((typeof b.tainacan !== "boolean" && typeof b.dspace !== "boolean") ||
+      (b.tainacan !== undefined && typeof b.tainacan !== "boolean") ||
+      (b.dspace !== undefined && typeof b.dspace !== "boolean")) throw new HttpError(400,"service choices must be boolean");
+  if (b.dspace === true && !await repositoryEnabled(env)) throw new HttpError(409,"repository addresses are not enabled");
+  if (lib.status !== "active" && lib.status !== "suspended") throw new HttpError(409, `library is ${lib.status}`);
+  const current = parseServices(lib.services);
+  const next = { ...current, ...(b.tainacan!==undefined ? {tainacan:b.tainacan} : {}), ...(b.dspace!==undefined ? {dspace:b.dspace} : {}) };
+  if (!next.koha && !next.tainacan && !next.dspace) {
+    throw new HttpError(409, "this address publishes only Tainacan: remove the address instead");
+  }
+  if (next.tainacan && !collectionFits(lib.slug, env)) {
+    throw new HttpError(409, "this library's name is too long for a collection address");
+  }
+  if (next.dspace && !repositoryFits(lib.slug,env)) throw new HttpError(409,"this library name is too long for a repository address");
+  if (servicesText(next) !== servicesText(current)) {
+    await provisioner(env, lib.id).setServices(lib.id, servicesText(next), lib.services);
+    await audit(env, `library:${lib.id}`, b.dspace!==undefined ? (b.dspace ? "services.dspace_on" : "services.dspace_off") : (b.tainacan ? "services.tainacan_on" : "services.tainacan_off"), lib.id);
+  }
+  return json({
+    services: SERVICE_NAMES.filter((n) => next[n]),
+    hostnames: publishedHostnames(lib.slug, env, next),
+  });
+}
+
+export async function detachRepository(request:Request,env:Env,body:ArrayBuffer):Promise<Response> {
+  const lib=await signedLibrary(request,env,body);
+  const result=await provisioner(env,lib.id).detachRepository(lib.id);
+  await audit(env,`library:${lib.id}`,"services.dspace_off",lib.id);
+  return json(result,result.job_id?202:200);
+}
+
+export async function rotateToken(request: Request, env: Env, body: ArrayBuffer): Promise<Response> {
+  const lib = await signedLibrary(request, env, body);
+  await provisioner(env, lib.id).rotate(lib.id);
+  await audit(env, `library:${lib.id}`, "tunnel_token.rotate", lib.id);
+  return json({ rotated: true });
+}
+
+export async function requestDeletion(env: Env, libraryId: string, actor: string): Promise<Response> {
+  const t = now();
+  const jobId = crypto.randomUUID();
+  const res = await env.DB.batch([
+    env.DB.prepare(
+      "UPDATE libraries SET status = 'deprovisioning', updated_at = ? WHERE id = ? AND status IN ('active', 'suspended', 'provisioning')",
+    ).bind(t, libraryId),
+    env.DB.prepare(
+      `INSERT INTO jobs (id, library_id, kind, state, created_at, updated_at)
+       SELECT ?, id, 'deprovision', 'queued', ?, ? FROM libraries WHERE id = ? AND status = 'deprovisioning'`,
+    ).bind(jobId, t, t, libraryId),
+  ]);
+  if ((res[1]?.meta.changes ?? 0) === 0) throw new HttpError(409, "library cannot be removed in its current state");
+  await env.PROVISION_QUEUE.send({ jobId });
+  await audit(env, actor, "library.delete", libraryId);
+  return json({ job_id: jobId }, 202);
+}
+
+export async function deleteLibrary(request: Request, env: Env, body: ArrayBuffer): Promise<Response> {
+  const lib = await signedLibrary(request, env, body);
+  return requestDeletion(env, lib.id, `library:${lib.id}`);
+}
+
+// ---- Public list of catalogs ----
+
+// A library that sent no heartbeat for this long (server off, panel removed)
+// leaves the public list; it comes back with its next heartbeat.
+export const LISTING_SILENCE_SECONDS = 30 * 86400;
+
+interface PublicLibrary {
+  name: string;
+  domain: string;
+  url: string;
+}
+
+async function publicLibraries(env: Env): Promise<PublicLibrary[]> {
+  const rows = await env.DB.prepare(
+    `SELECT institution_name, slug FROM libraries
+     WHERE status = 'active' AND public_listing = 1 AND (',' || services || ',') LIKE '%,koha,%'
+       AND COALESCE(last_heartbeat, created_at) > ?
+     ORDER BY institution_name COLLATE NOCASE LIMIT 500`,
+  )
+    .bind(now() - LISTING_SILENCE_SECONDS)
+    .all<{ institution_name: string; slug: string }>();
+  return (rows.results ?? []).map((lib) => {
+    const domain = hostnamesFor(lib.slug, env).opac;
+    return { name: lib.institution_name, domain, url: `https://${domain}` };
+  });
+}
+
+const PUBLIC_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Cache-Control": "public, max-age=300",
+};
+
+export async function listPublicLibraries(env: Env): Promise<Response> {
+  return json(await publicLibraries(env), 200, PUBLIC_HEADERS);
+}
+
+export function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+}
+
+// Plain HTML (no script), so search engines follow the links to each catalog.
+export async function librariesPage(env: Env): Promise<Response> {
+  const items = (await publicLibraries(env))
+    .map((l) => `<li><a href="${escapeHtml(l.url)}/">${escapeHtml(l.name)}</a> <span>${escapeHtml(l.domain)}</span></li>`)
+    .join("\n");
+  const html = `<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>Catálogos da rede koha.nexus</title>
+<meta name="description" content="Catálogos públicos (OPAC Koha) das bibliotecas da rede koha.nexus.">
+<body style="font-family:system-ui;max-width:44rem;margin:3rem auto;padding:0 1rem;line-height:1.5">
+<h1>Catálogos da rede koha.nexus</h1>
+<p>Catálogos públicos das bibliotecas que usam o <a href="https://koha.nexus/">koha.nexus</a>.</p>
+<ul>
+${items || "<li>Nenhum catálogo publicado ainda.</li>"}
+</ul>`;
+  return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8", ...PUBLIC_HEADERS } });
+}
+
+// The catalogs' home pages, for a Search Console property that covers the
+// whole zone (Domain property): each catalog keeps its own sitemap of records.
+export async function librariesSitemap(env: Env): Promise<Response> {
+  const urls = (await publicLibraries(env)).map((l) => `  <url><loc>${escapeHtml(l.url)}/</loc></url>`).join("\n");
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
+  return new Response(xml, { headers: { "Content-Type": "application/xml; charset=utf-8", ...PUBLIC_HEADERS } });
+}

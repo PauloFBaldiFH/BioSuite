@@ -3,10 +3,11 @@
 Suite de administração do [Galaxy](https://github.com/galaxyproject/galaxy),
 com painel interativo no terminal e instalação de ferramentas sob demanda.
 
-**Estado: instalação nativa e gestão de ferramentas.** O bootstrap instala o
-painel Python. Na tela Instalação, ele pode preparar Galaxy 26.1.2, PostgreSQL
-e um serviço systemd. Ferramentas são instaladas sob demanda, pela API Galaxy.
-Backup/restauração e conexão pública ainda estão em desenvolvimento.
+**Estado: instalação nativa/Docker, ferramentas e manutenção.** O bootstrap
+instala o painel Python. A tela Instalação prepara Galaxy 26.1.2/PostgreSQL,
+com escolha do modo e da porta local (padrão 8080). Há atualizações do painel
+e APT e um cliente de subdomínios Cloudflare. O broker BioSuite precisa ser
+publicado separadamente; backups/restauração e Windows continuam pendentes.
 
 ## Abrir e instalar pelo painel
 
@@ -15,10 +16,12 @@ Abra com `sudo biosuite-config` para instalar e controlar serviços do sistema.
 Na instalação por usuário, use `sudo "$HOME/.local/bin/biosuite-config"` quando
 precisar dessas ações. O `config.sh` do Nexus é preservado.
 
-Em **Instalação**, informe e-mail do administrador e porta, revise o plano e
+Em **Instalação**, selecione Nativo ou Docker, informe e-mail do administrador
+e porta, revise o plano e
 confirme a instalação. O painel mostra progresso, logs e estado. Veja o
 [guia da instalação nativa](docs/instalacao-nativa.md) para requisitos,
-primeiro acesso, recuperação e limitações.
+primeiro acesso, recuperação e limitações. Veja também o
+[guia de atualizações, Docker e conexão](docs/manutencao-e-docker.md).
 
 ## Módulos no painel
 
@@ -115,10 +118,11 @@ instala apenas o BioSuite em `.venv` e não requer execução com `sudo`.
 Execute-o novamente após alterações no código para atualizar o pacote instalado.
 
 O painel tem navegação por mouse e teclado, menu lateral com rolagem e telas
-Início, Instalação, Ferramentas, Backups, Conexão e Diagnóstico.
+Início, Instalação, Ferramentas, Backups, Conexão, Atualizações e Diagnóstico.
 Atalhos: `d` para diagnóstico, `p` para plano e `q` para sair.
-A gestão de ferramentas exige um Galaxy existente configurado. Backup e conexão
-pública são apresentados como funcionalidades em desenvolvimento.
+A gestão de ferramentas exige um Galaxy configurado. Backups estão em
+desenvolvimento; conexão pública exige publicar e configurar o
+[broker adaptado](broker/README.md) antes de usar o painel.
 
 Também é possível consultar sem abrir o painel:
 
@@ -140,13 +144,18 @@ PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
 Os testes cobrem diagnóstico, matriz de distribuições, preservação da instalação
 anterior quando uma atualização falha, contratos simulados da API Galaxy,
 confirmação e cancelamento de operações, e navegação em terminais de 110×40 e 80×24.
+O teste real Docker `tests/docker-smoke.py` verificou API, HTML, JavaScript,
+catálogo básico, schema PostgreSQL e persistência após parar/iniciar/reinstalar
+com porta personalizada 8082. Há workflow manual para repetir essa integração.
 A CI também instala o painel por pipe e reexecuta a instalação nas quatro
 distribuições, em containers descartáveis. O usuário não precisa de Docker
 para instalar o BioSuite. A integração nativa tem um teste separado em
 `tests/native-smoke.sh` e workflow manual: Galaxy/PostgreSQL reais, API, HTML,
 JavaScript, catálogo básico e reexecução preservando configuração foram
 verificados em Debian 13 e Ubuntu 24.04. O ciclo automático via systemd,
-análises científicas, Windows/WSL e Cloudflare ainda precisam de validação.
+análises científicas, Windows/WSL e a publicação real no Cloudflare ainda
+precisam de validação. Os testes do broker executam Worker/D1/filas/DO locais
+e cliente Python real com API Cloudflare simulada.
 
 ## Objetivo da primeira versão
 
@@ -160,5 +169,5 @@ análises científicas, Windows/WSL e Cloudflare ainda precisam de validação.
 Consulte a [arquitetura e o plano de entrega](docs/arquitetura.md).
 
 O [Koha Nexus](https://github.com/PauloFBaldiFH/koha.nexus) é a referência de
-experiência de uso. As operações específicas do Koha serão substituídas por
-integrações próprias do Galaxy.
+experiência de uso. O broker incorpora código GPLv3 desse projeto; veja os
+[avisos de terceiros](THIRD_PARTY_NOTICES.md) e [LICENSE](LICENSE).

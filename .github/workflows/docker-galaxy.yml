@@ -1,0 +1,26 @@
+name: Docker Galaxy integration (manual)
+on:
+  workflow_dispatch:
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Galaxy real, porta personalizada e persistência
+        env:
+          BIOSUITE_DOCKER_HOME: ${{ runner.temp }}/biosuite-docker-smoke
+          PYTHONPATH: src
+        run: python3 tests/docker-smoke.py
+      - name: Logs e parada dos containers de teste
+        if: always()
+        env:
+          BIOSUITE_DOCKER_HOME: ${{ runner.temp }}/biosuite-docker-smoke
+        run: |
+          if [ -f "$BIOSUITE_DOCKER_HOME/compose.json" ]; then
+            docker compose --project-name biosuite-galaxy --file "$BIOSUITE_DOCKER_HOME/compose.json" logs --tail 100
+            docker compose --project-name biosuite-galaxy --file "$BIOSUITE_DOCKER_HOME/compose.json" down
+          fi

@@ -1,0 +1,19 @@
+name: BioSuite broker
+on: [push, pull_request]
+jobs:
+  broker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: broker/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci
+        working-directory: broker
+      - run: npm run typecheck && npm test && npm run test:e2e
+        working-directory: broker

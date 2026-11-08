@@ -149,6 +149,19 @@ biosuite_main() {
     "$biosuite_release/bin/python" -c 'from biosuite.panel import BioSuiteApp'
     "$biosuite_release/bin/biosuite" --version
     "$biosuite_release/bin/biosuite" doctor >/dev/null
+    "$biosuite_release/bin/python" - "$biosuite_release/biosuite-install.json" "$source_dir" "$prefix" "$bin_dir" <<'PY'
+import json, re, subprocess, sys
+try:
+    sha = subprocess.run(['git', '-C', sys.argv[2], 'rev-parse', 'HEAD'], capture_output=True, text=True).stdout.strip()
+    dirty = subprocess.run(['git', '-C', sys.argv[2], 'status', '--porcelain'], capture_output=True, text=True).stdout.strip()
+    if dirty:
+        sha = ''
+except FileNotFoundError:
+    sha = ''
+with open(sys.argv[1], 'w') as stream:
+    json.dump({'prefix': sys.argv[3], 'bin_dir': sys.argv[4],
+               'commit': sha if re.fullmatch('[0-9a-f]{40}', sha) else None}, stream)
+PY
 
     for command_name in biosuite biosuite-config; do
         launcher="$bin_dir/$command_name"
