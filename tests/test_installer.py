@@ -41,6 +41,21 @@ class InstallerTests(unittest.TestCase):
                                 capture_output=True, text=True)
         self.assertEqual(result.returncode, 2)
 
+    def test_foreign_config_command_is_not_overwritten(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            bin_dir = root / 'bin'
+            bin_dir.mkdir()
+            command = bin_dir / 'biosuite-config'
+            command.write_text('existing user command\n')
+            script = ('source "$1"; biosuite_supported_os() { return 0; }; '
+                      'biosuite_main --source "$2" --prefix "$3" --bin-dir "$4" --no-launch')
+            result = subprocess.run(['bash', '-c', script, 'test', str(INSTALLER), str(ROOT),
+                                     str(root / 'app'), str(bin_dir)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertEqual(command.read_text(), 'existing user command\n')
+            self.assertFalse((root / 'app').exists())
+
     def test_failed_update_keeps_previous_installation(self):
         # Falha controlada na criação do venv, sem rede ou APT.
         with tempfile.TemporaryDirectory() as folder:

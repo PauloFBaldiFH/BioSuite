@@ -120,7 +120,9 @@ CONNECT (HTTP 403). A busca e as revisões foram testadas com respostas simulada
 conforme o contrato documentado pelo BioBlend; o acesso ao catálogo ao vivo
 ainda precisa ser validado em uma rede com esse destino liberado.
 
-Ainda não foi feita instalação em um Galaxy real nem executada uma análise
-IQ-TREE/QIIME 2. Status `Installed` indica o estado informado pelo Galaxy;
+Ainda não foram instalados IQ-TREE/QIIME 2 nem executadas suas análises reais.
+A base Galaxy/PostgreSQL foi instalada e sua API/interface foram verificadas
+conforme o [guia de instalação](instalacao-nativa.md).
+Status `Installed` indica o estado informado pelo Galaxy;
 ele não certifica execução científica, recursos suficientes ou qualidade dos
-resultados. A instalação nativa da base Galaxy permanece uma entrega separada.
+resultados.

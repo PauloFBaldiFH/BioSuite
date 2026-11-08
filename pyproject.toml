@@ -4,13 +4,17 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "biosuite"
-version = "0.3.0"
+version = "0.4.0"
 description = "Painel de administração modular para Galaxy"
 requires-python = ">=3.10"
 dependencies = ["textual==8.2.0"]
 
 [project.scripts]
 biosuite = "biosuite.cli:main"
+biosuite-config = "biosuite.cli:main"
+
+[tool.setuptools.package-data]
+biosuite = ["assets/*.sh"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

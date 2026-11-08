@@ -1,0 +1,19 @@
+name: Native Galaxy integration (manual)
+on:
+  workflow_dispatch:
+
+jobs:
+  native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [ubuntu:24.04, debian:13-slim]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install real Galaxy and check API, interface and repeatability
+        env:
+          TEST_IMAGE: ${{ matrix.image }}
+        run: |
+          docker run --rm -v "$PWD:/src:ro" "$TEST_IMAGE" bash -ec 'cp -a /src /tmp/repo; bash /tmp/repo/tests/native-smoke.sh'

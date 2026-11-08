@@ -23,7 +23,7 @@ class PreflightTests(unittest.TestCase):
                           False, None, 15, '/data', False, {})
         plan = installation_plan(machine)
         self.assertIn('fora do alvo inicial', plan)
-        self.assertIn('ainda não está implementada', plan)
+        self.assertIn('Nenhum comando é executado', plan)
         self.assertIn('nenhum', plan.lower())
 
     def test_debian_and_ubuntu_are_in_panel_matrix(self):
@@ -34,7 +34,7 @@ class PreflightTests(unittest.TestCase):
                                   False, 8, 40, '/data', True, {})
                 plan = installation_plan(machine)
                 self.assertIn('corresponde à matriz do painel', plan)
-                self.assertIn('Galaxy ainda requer validação própria', plan)
+                self.assertIn('resposta da API e interface', plan)
 
     def test_doctor_returns_machine_json(self):
         output = io.StringIO()

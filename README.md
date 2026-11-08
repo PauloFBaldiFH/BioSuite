@@ -3,10 +3,22 @@
 Suite de administração do [Galaxy](https://github.com/galaxyproject/galaxy),
 com painel interativo no terminal e instalação de ferramentas sob demanda.
 
-**Estado: primeira base funcional.** O bootstrap instala o painel Python;
-o painel oferece diagnóstico local, prévia da instalação e gestão de repositórios
-de ferramentas em um Galaxy existente. A instalação da base do Galaxy, os
-backups e a conexão pública ainda estão em desenvolvimento.
+**Estado: instalação nativa e gestão de ferramentas.** O bootstrap instala o
+painel Python. Na tela Instalação, ele pode preparar Galaxy 26.1.2, PostgreSQL
+e um serviço systemd. Ferramentas são instaladas sob demanda, pela API Galaxy.
+Backup/restauração e conexão pública ainda estão em desenvolvimento.
+
+## Abrir e instalar pelo painel
+
+O comando permanente é **`biosuite-config`** (também disponível como `biosuite`).
+Abra com `sudo biosuite-config` para instalar e controlar serviços do sistema.
+Na instalação por usuário, use `sudo "$HOME/.local/bin/biosuite-config"` quando
+precisar dessas ações. O `config.sh` do Nexus é preservado.
+
+Em **Instalação**, informe e-mail do administrador e porta, revise o plano e
+confirme a instalação. O painel mostra progresso, logs e estado. Veja o
+[guia da instalação nativa](docs/instalacao-nativa.md) para requisitos,
+primeiro acesso, recuperação e limitações.
 
 ## Módulos no painel
 
@@ -58,18 +70,18 @@ Galaxy, PostgreSQL, QIIME 2 ou IQ-TREE.
 Por padrão, a instalação pertence ao usuário:
 
 - Ambientes: `${XDG_DATA_HOME:-~/.local/share}/biosuite/releases`.
-- Comando: `~/.local/bin/biosuite`.
+- Comandos: `~/.local/bin/biosuite-config` e `~/.local/bin/biosuite`.
 
 Para abrir novamente de qualquer diretório:
 
 ```bash
-~/.local/bin/biosuite
+~/.local/bin/biosuite-config
 ```
 
-Se `~/.local/bin` já estiver no `PATH`, basta `biosuite`. O instalador mostra o
+Se `~/.local/bin` já estiver no `PATH`, basta `biosuite-config`. O instalador mostra o
 comando para acrescentar esse diretório na sessão quando necessário e não
 altera seus arquivos de shell. Quando executado como root, usa `/opt/biosuite`
-e `/usr/local/bin/biosuite`.
+e os comandos em `/usr/local/bin`.
 
 Reexecutar o comando cria um novo ambiente, verifica importação do painel e
 diagnóstico, e só então troca a instalação ativa. A versão anterior é mantida;
@@ -94,7 +106,7 @@ Com Python 3.10+ e suporte a `venv`, no checkout do projeto:
 
 ```bash
 bash scripts/install.sh
-.venv/bin/biosuite
+.venv/bin/biosuite-config
 ```
 
 No Ubuntu ou Debian, caso necessário, instale os pré-requisitos com
@@ -130,8 +142,11 @@ anterior quando uma atualização falha, contratos simulados da API Galaxy,
 confirmação e cancelamento de operações, e navegação em terminais de 110×40 e 80×24.
 A CI também instala o painel por pipe e reexecuta a instalação nas quatro
 distribuições, em containers descartáveis. O usuário não precisa de Docker
-para instalar o BioSuite. Esses testes não validam uma instalação real do
-Galaxy, PostgreSQL, ferramentas científicas, Windows/WSL ou Cloudflare.
+para instalar o BioSuite. A integração nativa tem um teste separado em
+`tests/native-smoke.sh` e workflow manual: Galaxy/PostgreSQL reais, API, HTML,
+JavaScript, catálogo básico e reexecução preservando configuração foram
+verificados em Debian 13 e Ubuntu 24.04. O ciclo automático via systemd,
+análises científicas, Windows/WSL e Cloudflare ainda precisam de validação.
 
 ## Objetivo da primeira versão
 

@@ -8,8 +8,9 @@ from textual.app import App, ComposeResult
 from textual.containers import Horizontal, VerticalScroll
 from textual.widgets import Button, Footer, Header, Static
 
-from biosuite.preflight import inspect_machine, installation_plan
+from biosuite.preflight import inspect_machine
 from biosuite.modules import ModulePanel
+from biosuite.native_panel import NativePanel
 
 
 class BioSuiteApp(App):
@@ -45,10 +46,11 @@ class BioSuiteApp(App):
                                     ('Conexão', 'connection'), ('Diagnóstico', 'doctor')]:
                     yield Button(label, id=name)
             with VerticalScroll(id='content'):
-                yield Static('PRÉVIA • Galaxy não é instalado por esta versão', id='phase')
+                yield Static('Galaxy nativo • ferramentas sob demanda', id='phase')
                 yield Static('', id='page-title')
                 yield Static('', id='page-body')
                 yield ModulePanel(id='module-panel')
+                yield NativePanel(id='native-panel')
         yield Footer()
 
     def on_mount(self) -> None:
@@ -64,11 +66,23 @@ class BioSuiteApp(App):
     def action_plan(self) -> None:
         self.show_page('install')
 
+    def action_quit(self) -> None:
+        if self.query_one('#native-panel', NativePanel).busy:
+            self.notify('Aguarde a operação em andamento e confira os logs antes de sair.', severity='warning')
+        else:
+            self.exit()
+
     def show_page(self, name: str) -> None:
         self.query_one('#module-panel').display = name == 'tools'
+        self.query_one('#native-panel').display = name == 'install'
         if name == 'install':
             title = 'Instalação • planejar antes de alterar'
-            body = installation_plan(inspect_machine(self.storage))
+            machine = inspect_machine(self.storage)
+            body = ('PLANO NATIVO • Galaxy 26.1.2 + PostgreSQL\n'
+                    f'{machine.distribution} {machine.version} • {machine.architecture}\n'
+                    f'RAM: {machine.memory_gib} GiB • Disco livre medido: {machine.free_gib} GiB\n'
+                    'Informe o administrador e a porta. Revise o plano antes de confirmar; '
+                    'a instalação exige privilégios de administrador.')
         elif name == 'doctor':
             title = 'Diagnóstico • leitura local atualizada'
             body = ('Este levantamento não testa a saúde do Galaxy ou do PostgreSQL.\n\n'
@@ -77,10 +91,9 @@ class BioSuiteApp(App):
             title, body = {
                 'home': ('Bem-vindo ao BioSuite',
                          'Uma central para instalar, acompanhar e manter seu Galaxy.\n\n'
-                         'Disponível agora\n• Diagnóstico da máquina\n• Prévia do plano de instalação\n'
+                         'Disponível agora\n• Diagnóstico da máquina\n• Instalação nativa do Galaxy e PostgreSQL\n'
                          '• Gestão de módulos em um Galaxy existente\n\n'
-                         'Em desenvolvimento\n• Instalação nativa do Galaxy\n'
-                         '• Backup e restauração\n• Acesso remoto\n\n'
+                         'Em desenvolvimento\n• Backup e restauração\n• Acesso remoto\n\n'
                          'Comece por Diagnóstico e consulte o plano em Instalação.'),
                 'tools': ('Ferramentas • módulos do Galaxy',
                           'Atalhos por área e busca paginada no catálogo público do Tool Shed.\n'

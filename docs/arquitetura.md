@@ -1,9 +1,11 @@
 # Arquitetura inicial do BioSuite
 
 Proposta baseada nos requisitos do projeto e na leitura dos repositórios
-Koha Nexus e Galaxy. O bootstrap do painel, o diagnóstico local e a navegação
-inicial já foram implementados. Os componentes de infraestrutura abaixo estão
-planejados; este documento não representa uma instalação Galaxy já validada.
+Koha Nexus e Galaxy. Estão implementados o painel, o diagnóstico, a gestão de
+repositórios e a instalação nativa inicial Galaxy/PostgreSQL. API e interface
+foram verificadas em Debian 13 e Ubuntu 24.04. Os demais componentes e a execução
+automática via systemd ainda têm validações pendentes; veja o
+[guia da instalação nativa](instalacao-nativa.md).
 
 ## Referências consultadas
 
@@ -15,14 +17,18 @@ planejados; este documento não representa uma instalação Galaxy já validada.
   O código consultado exige Python >= 3.10. A versão de produção deverá ser
   uma release estável fixada, com requisitos conferidos nessa release,
   em vez de instalar automaticamente a branch de desenvolvimento.
+  O instalador agora fixa a release 26.1.2, commit
+  `391641a4e121216de4764ffd12b8c666859460ea`, usando seu bootstrap e cliente
+  pré-compilado oficiais.
 
 ## Instalação e execução
 
 O bootstrap do painel cobre Ubuntu 22.04/24.04 e Debian 12/13, em x86_64,
 com instalação por um comando e launcher permanente. Os testes Linux usam
 containers apenas para isolar as distribuições: a instalação final é nativa.
-A mesma matriz será o alvo da instalação Galaxy, ainda pendente de validação
-dos serviços e das ferramentas científicas em cada distribuição.
+A mesma matriz é alvo da instalação Galaxy. Debian 13 e Ubuntu 24.04 tiveram
+validação funcional em primeiro plano; ciclo systemd, versões mais antigas e
+ferramentas científicas exigem validação própria.
 No Windows, usar Ubuntu em WSL2, com systemd e os dados no filesystem Linux;
 evitar armazenar datasets e ambientes científicos em `/mnt/c`.
 Outras distribuições e arquiteturas só serão anunciadas após testes próprios.
