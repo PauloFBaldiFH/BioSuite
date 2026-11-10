@@ -4,7 +4,7 @@ Proposta baseada nos requisitos do projeto e na leitura dos repositórios
 Koha Nexus e Galaxy. Estão implementados o painel, o diagnóstico, a gestão de
 repositórios e a instalação Galaxy/PostgreSQL nativa ou Docker, além de manutenção APT e
 atualização do painel. O cliente e broker Cloudflare têm testes locais. API e interface
-foram verificadas em Debian 13 e Ubuntu 24.04. Os demais componentes e a execução
+foram verificadas em Debian 12/13 e Ubuntu 22.04/24.04. Os demais componentes e a execução
 automática via systemd ainda têm validações pendentes; veja o
 [guia da instalação nativa](instalacao-nativa.md).
 
@@ -27,9 +27,9 @@ automática via systemd ainda têm validações pendentes; veja o
 O bootstrap do painel cobre Ubuntu 22.04/24.04 e Debian 12/13, em x86_64,
 com instalação por um comando e launcher permanente. Os testes Linux usam
 containers apenas para isolar as distribuições: a instalação final permite escolher nativo ou Docker.
-A mesma matriz é alvo da instalação Galaxy. Debian 13 e Ubuntu 24.04 tiveram
-validação funcional em primeiro plano; ciclo systemd, versões mais antigas e
-ferramentas científicas exigem validação própria.
+A mesma matriz foi verificada com Galaxy/PostgreSQL em primeiro plano,
+com Ubuntu 22.04 e Debian 12 acrescentados nesta continuação. O ciclo real
+systemd e as ferramentas científicas exigem validação própria.
 No Windows, usar Ubuntu em WSL2, com systemd e os dados no filesystem Linux;
 evitar armazenar datasets e ambientes científicos em `/mnt/c`.
 Outras distribuições e arquiteturas só serão anunciadas após testes próprios.

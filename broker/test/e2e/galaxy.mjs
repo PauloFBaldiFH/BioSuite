@@ -23,6 +23,9 @@ async function admin(path){
 }
 try{
   const caps=await python('capabilities');assert.equal(caps.application,'galaxy');checks++;
+  const conflict=await python('start',['BioSuite lab','lab@example.org','laboratorio-admin',8087],'staff-conflict');
+  assert.equal(conflict.status,'approved');
+  assert.ok(!conflict.hostnames.galaxy.endsWith('-admin.example.org'));checks++;
   const start=await python('start',['BioSuite lab','lab@example.org','laboratorio',8087]);
   assert.equal(start.status,'approved');assert.ok(!JSON.stringify(start).includes('device_code'));checks++;
   await python('enroll');assert.ok(await broker.settle());

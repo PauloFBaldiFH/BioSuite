@@ -9,11 +9,28 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [ubuntu:24.04, debian:13-slim]
+        image: [ubuntu:22.04, ubuntu:24.04, debian:12-slim, debian:13-slim]
     steps:
       - uses: actions/checkout@v4
       - name: Install real Galaxy and check API, interface and repeatability
         env:
           TEST_IMAGE: ${{ matrix.image }}
+          BIOSUITE_SMOKE_PORT: 8087
         run: |
-          docker run --rm -v "$PWD:/src:ro" "$TEST_IMAGE" bash -ec 'cp -a /src /tmp/repo; bash /tmp/repo/tests/native-smoke.sh'
+          docker run --rm -v "$PWD:/src:ro" -e BIOSUITE_SMOKE_PORT "$TEST_IMAGE" bash -ec 'mkdir /tmp/repo; cp -a /src/src /src/pyproject.toml /src/LICENSE /src/installer /src/scripts /src/tests /tmp/repo/; bash /tmp/repo/tests/native-smoke.sh'
+
+  systemd:
+    # GitHub-hosted runners são VMs descartáveis; não usar runners self-hosted.
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-22.04, ubuntu-24.04]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalação nativa e stop/start via systemd na VM
+        run: sudo env BIOSUITE_SMOKE_SYSTEMD=1 BIOSUITE_SMOKE_PORT=8087 bash tests/native-smoke.sh
+      - name: Diagnóstico do serviço
+        if: always()
+        run: sudo journalctl -u biosuite-galaxy.service -n 150 --no-pager

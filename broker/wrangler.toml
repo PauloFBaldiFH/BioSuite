@@ -1,7 +1,8 @@
 # BioSuite subdomain broker (Cloudflare Worker). See README.md.
 #
 # Fill in before the first deploy (none of these are secrets):
-#   CF_ACCOUNT_ID, CF_ZONE_ID  (dashboard: koha.nexus -> Overview, right column)
+#   account_id (top level; same as CF_ACCOUNT_ID), CF_ACCOUNT_ID, CF_ZONE_ID
+#     (dashboard: koha.nexus -> Overview, right column)
 #   database_id                (printed by `npx wrangler d1 create biosuite-broker`)
 # Secrets are never written here: `npx wrangler secret put CF_API_TOKEN`,
 # `ADMIN_TOKEN` and `STAFF_SESSION_KEY`.
