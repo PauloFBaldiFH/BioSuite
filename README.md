@@ -155,8 +155,11 @@ para instalar o BioSuite. A integração nativa tem um teste separado em
 `tests/native-smoke.sh` e workflow manual: Galaxy/PostgreSQL reais, API, HTML,
 JavaScript, catálogo básico e reexecução preservando configuração foram
 verificados em Debian 12/13 e Ubuntu 22.04/24.04. Os testes mais recentes
-conferiram também portas alternativas e preservação de um arquivo de dados. O ciclo automático via systemd,
-análises científicas, Windows/WSL e a publicação real no Cloudflare ainda
+conferiram também portas alternativas e preservação de um arquivo de dados.
+Em VMs Ubuntu 22.04/24.04, instalação, stop/start via systemd, backup completo,
+restauração de dataset e rollback com falha injetada também passaram
+([execução no Actions](https://github.com/PauloFBaldiFH/BioSuite/actions/runs/42887838165)).
+Reinicialização da máquina, análises científicas, Windows/WSL e a publicação real no Cloudflare ainda
 precisam de validação. Os testes do broker executam Worker/D1/filas/DO locais
 e cliente Python real com API Cloudflare simulada.
 

@@ -1,5 +1,7 @@
 name: Native Galaxy integration (manual)
 on:
+  push:
+    branches: [validation/native-backups]
   workflow_dispatch:
     inputs:
       backups:
@@ -7,8 +9,12 @@ on:
         type: boolean
         default: false
 
+permissions:
+  contents: read
+
 jobs:
   native:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -27,7 +33,7 @@ jobs:
   systemd:
     # GitHub-hosted runners são VMs descartáveis; não usar runners self-hosted.
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: ${{ inputs.backups && 90 || 45 }}
+    timeout-minutes: ${{ (inputs.backups || github.event_name == 'push') && 90 || 45 }}
     strategy:
       fail-fast: false
       matrix:
@@ -37,8 +43,23 @@ jobs:
       - name: Instalação nativa e stop/start via systemd na VM
         run: sudo env BIOSUITE_SMOKE_SYSTEMD=1 BIOSUITE_SMOKE_PORT=8087 bash tests/native-smoke.sh
       - name: Backup, restauração e rollback nativos
-        if: inputs.backups
+        if: inputs.backups || github.event_name == 'push'
         run: sudo env PYTHONPATH=src BIOSUITE_BACKUP_SMOKE=1 python3 tests/backups-native-smoke.py
       - name: Diagnóstico do serviço
         if: always()
         run: sudo journalctl -u biosuite-galaxy.service -n 150 --no-pager
+      - name: Resumo público da falha de integração
+        if: failure()
+        run: |
+          sudo python3 - <<'PY'
+          from pathlib import Path
+          for filename in ('/var/log/biosuite-install/galaxy.log', '/var/log/biosuite-install/backups.log'):
+              path = Path(filename)
+              if not path.is_file():
+                  continue
+              with path.open(errors='replace') as stream:
+                  from collections import deque
+                  text = ''.join(deque(stream, maxlen=25))[-6000:]
+              text = text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+              print(f'::error title=Integração nativa - {path.name}::{text}')
+          PY

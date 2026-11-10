@@ -42,7 +42,7 @@ obj=Dataset(id=900001,uuid=uuid.UUID('00000000000000000000000000900001'))
 assert open(store.get_filename(obj)).read() == 'ACGT'+chr(10)
 """
 capture(['runuser','-u',DB,'--','env','PYTHONPATH=/opt/biosuite-galaxy/galaxy/lib',
-         '/opt/biosuite-galaxy/galaxy/.venv/bin/python','-c',code])
+         '/opt/biosuite-galaxy/galaxy/.venv/bin/python','-c',code],cwd='/')
 assert b.running()
 write('LATEST\n');b.sql('UPDATE dataset SET file_size=7 WHERE id=900001')
 with patch.object(NativeBackend,'promote',side_effect=OperationError('injected promotion failure')):

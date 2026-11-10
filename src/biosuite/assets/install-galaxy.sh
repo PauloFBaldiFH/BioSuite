@@ -24,6 +24,8 @@ done
 [[ "$port" =~ ^[0-9]{4,5}$ ]] && ((10#$port >= 1024 && 10#$port <= 65535)) || { echo 'Porta inválida (1024–65535).' >&2; exit 2; }
 [[ "$yes" == 1 ]] || { echo 'É necessário confirmar o plano com --yes.' >&2; exit 2; }
 [[ "$EUID" == 0 ]] || { echo 'Abra o painel com sudo biosuite-config para instalar o sistema.' >&2; exit 1; }
+# Comandos com runuser não podem herdar /root ou workspaces privados.
+cd /
 . /etc/os-release
 case "$ID:$VERSION_ID:$(uname -m)" in
     ubuntu:22.04:x86_64|ubuntu:24.04:x86_64|debian:12:x86_64|debian:13:x86_64) ;;
