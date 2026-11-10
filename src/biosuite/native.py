@@ -138,7 +138,11 @@ def _service(action: str) -> dict:
 
 def service(action: str) -> dict:
     from biosuite.operations import lock, OperationError
+    if action not in ('start', 'stop', 'restart'):
+        raise NativeError('Ação de serviço inválida.')
     _require_root()
+    if not (BASE / 'complete').is_file():
+        raise NativeError('A instalação gerenciada do Galaxy ainda não foi concluída.')
     try:
         with lock(BASE / 'install.lock'):
             if (BASE / 'maintenance.json').exists():
