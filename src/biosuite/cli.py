@@ -12,7 +12,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description='BioSuite — painel modular para Galaxy')
     parser.add_argument('--storage', type=Path, default=Path.cwd(),
                         help='Caminho onde os dados serão armazenados; usado para medir espaço')
-    parser.add_argument('--version', action='version', version='BioSuite 0.5.0')
+    parser.add_argument('--version', action='version', version='BioSuite 0.6.0')
     commands = parser.add_subparsers(dest='command')
     commands.add_parser('doctor', help='Diagnóstico local em JSON; não certifica prontidão do Galaxy')
     commands.add_parser('plan', help='Prévia das etapas; não executa a instalação do Galaxy')
@@ -55,6 +55,24 @@ def main(argv: list[str] | None = None) -> int:
         sub = connection_commands.add_parser(name)
         sub.add_argument('--file', type=Path, required=True)
         sub.add_argument('--yes', action='store_true')
+    backup = commands.add_parser('backups', help='Backup local, ensaio, restauração e rclone')
+    backup_commands = backup.add_subparsers(dest='backup_command', required=True)
+    for name in ('create', 'rehearse', 'restore'):
+        sub = backup_commands.add_parser(name)
+        sub.add_argument('--mode', choices=('native', 'docker'), default='native')
+        sub.add_argument('--yes', action='store_true')
+        if name != 'create':
+            sub.add_argument('--source', type=Path, required=True)
+        if name != 'rehearse':
+            sub.add_argument('--directory', type=Path)
+    backup_commands.add_parser('verify').add_argument('--source', type=Path, required=True)
+    backup_commands.add_parser('remotes')
+    backup_commands.add_parser('list').add_argument('--directory', type=Path, required=True)
+    for name in ('upload', 'download'):
+        sub = backup_commands.add_parser(name)
+        sub.add_argument('--remote', required=True)
+        sub.add_argument('--yes', action='store_true')
+        sub.add_argument('--source' if name == 'upload' else '--directory', type=Path, required=True)
     args = parser.parse_args(argv)
     if args.command == 'doctor':
         print(json.dumps(inspect_machine(args.storage).as_dict(), ensure_ascii=False, indent=2))
@@ -90,6 +108,35 @@ def main(argv: list[str] | None = None) -> int:
                 result = provider.status() if action == 'status' else provider.service(action)
                 print(json.dumps(result, ensure_ascii=False, indent=2))
         except (native.NativeError, OperationError, OSError, subprocess.TimeoutExpired) as error:
+            print(str(error), file=sys.stderr)
+            return 1
+    elif args.command == 'backups':
+        from biosuite import backups
+        from biosuite.backup_format import verify
+        from biosuite.operations import OperationError
+        try:
+            action = args.backup_command
+            if action not in ('verify', 'remotes', 'list') and not args.yes:
+                parser.error('Revise a operação e confirme com --yes. Restaure apenas backups confiáveis.')
+            if action == 'list':
+                result = backups.list_local(args.directory)
+            elif action == 'create':
+                result = {'backup': str(backups.create(args.mode, args.directory))}
+            elif action == 'verify':
+                info = verify(args.source)
+                result = {'integrity': 'verified', 'mode': info['mode'], 'galaxy_release': info['galaxy_release'], 'database_restore': 'not_tested'}
+            elif action == 'rehearse':
+                result = backups.rehearse(args.mode, args.source)
+            elif action == 'restore':
+                result = backups.restore(args.mode, args.source, args.directory)
+            elif action == 'remotes':
+                result = backups.remotes()
+            elif action == 'upload':
+                result = backups.upload(args.source, args.remote)
+            else:
+                result = backups.download(args.remote, args.directory)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        except (OperationError, OSError, ValueError, KeyError) as error:
             print(str(error), file=sys.stderr)
             return 1
     elif args.command == 'updates':

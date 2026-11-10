@@ -104,13 +104,15 @@ precisa do banco de dados, datasets, configurações e inventário das ferrament
 object stores externos e bases de referência exigem políticas explícitas.
 Dados e metadados precisam representar o mesmo ponto consistente.
 
-A primeira implementação deve oferecer backup com janela de manutenção:
+A primeira implementação oferece backup com janela de manutenção:
 impedir novos jobs, aguardar ou interromper jobs de forma controlada e impedir
 escritas antes da captura do banco e dos arquivos. Só liberar o serviço ao fim
 da etapa consistente. Backups online ficam para uma estratégia validada própria.
 
-Cada backup terá manifesto, versões, identificação do ponto de captura e
-checksums. Validar conteúdo e integridade, testar a restauração em destino
+Cada backup tem manifesto, versões, identificação do ponto de captura e
+checksums. A tela/CLI inclui ensaio SQL temporário, restauração com cópia de
+segurança e transporte rclone; veja [o guia](backups.md). O ciclo nativo via
+systemd e um provedor real de nuvem ainda precisam da validação descrita no guia. Validar conteúdo e integridade, testar a restauração em destino
 isolado e criar backup de segurança antes de substituir uma instalação.
 Restaurar primeiro para staging, com verificação de espaço, permissões,
 versão do banco e acesso real a um dataset de teste.

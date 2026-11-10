@@ -13,6 +13,7 @@ from biosuite.modules import ModulePanel
 from biosuite.native_panel import NativePanel
 from biosuite.update_panel import UpdatePanel
 from biosuite.connection_panel import ConnectionPanel
+from biosuite.backup_panel import BackupPanel
 
 
 class BioSuiteApp(App):
@@ -55,6 +56,7 @@ class BioSuiteApp(App):
                 yield NativePanel(id='native-panel')
                 yield UpdatePanel(id='update-panel')
                 yield ConnectionPanel(id='connection-panel')
+                yield BackupPanel(id='backup-panel')
         yield Footer()
 
     def on_mount(self) -> None:
@@ -71,16 +73,21 @@ class BioSuiteApp(App):
         self.show_page('install')
 
     def action_quit(self) -> None:
-        if any(self.query_one(selector).busy for selector in ('#native-panel', '#update-panel', '#connection-panel')):
+        if any(self.query_one(selector).busy for selector in ('#native-panel', '#update-panel', '#connection-panel', '#backup-panel')):
             self.notify('Aguarde a operação em andamento e confira os logs antes de sair.', severity='warning')
         else:
             self.exit()
 
     def show_page(self, name: str) -> None:
+        if getattr(self, 'current_page', name) != name and any(self.query_one(selector).busy for selector in ('#native-panel', '#update-panel', '#connection-panel', '#backup-panel')):
+            self.notify('Aguarde a operação atual antes de mudar de tela.', severity='warning')
+            return
+        self.current_page = name
         self.query_one('#module-panel').display = name == 'tools'
         self.query_one('#native-panel').display = name == 'install'
         self.query_one('#update-panel').display = name == 'updates'
         self.query_one('#connection-panel').display = name == 'connection'
+        self.query_one('#backup-panel').display = name == 'backup'
         if name == 'install':
             title = 'Instalação • planejar antes de alterar'
             machine = inspect_machine(self.storage)
@@ -100,7 +107,7 @@ class BioSuiteApp(App):
                          'Disponível agora\n• Diagnóstico da máquina\n• Galaxy nativo ou Docker\n• Atualizações do painel e APT\n'
                          '• Gestão de módulos em um Galaxy existente\n\n'
                          'Conexão pública requer o broker BioSuite configurado no Cloudflare.\n'
-                         'Em desenvolvimento\n• Backup e restauração\n\n'
+                         '• Backups locais, ensaio e restauração\n• Transporte rclone\n\n'
                          'Comece por Diagnóstico e consulte o plano em Instalação.'),
                 'tools': ('Ferramentas • módulos do Galaxy',
                           'Atalhos por área e busca paginada no catálogo público do Tool Shed.\n'
@@ -108,11 +115,8 @@ class BioSuiteApp(App):
                           'Conecte seu Galaxy, escolha a revisão e confirme a operação.\n'
                           'Abrir esta tela não faz consultas ou instalações automaticamente.'),
                 'backup': ('Backups • local e nuvem',
-                           'Integração em desenvolvimento.\n\n'
-                           'O backup incluirá banco, datasets, configurações e manifesto.\n'
-                           'A restauração será testada em ambiente isolado antes de substituir dados.\n'
-                           'rclone permitirá cópia para um destino escolhido por você.\n'
-                           'Nenhum backup ou upload está sendo realizado.'),
+                           'Crie uma cópia consistente com Galaxy parado, confira integridade e teste o banco antes de restaurar.\n'
+                           'A restauração cria um backup de segurança e mantém rollback até a verificação da aplicação.'),
                 'connection': ('Conexão • Cloudflare Tunnel',
                                'Domínio koha.nexus com namespace bio- e broker isolado.\n'
                                'Nenhum tunnel ou subdomínio é criado apenas por abrir esta tela.'),

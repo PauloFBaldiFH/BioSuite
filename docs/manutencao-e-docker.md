@@ -123,5 +123,5 @@ exigem intervenção do administrador. Não apague a
 identidade para tentar repetir a matrícula. A instalação/configuração do conector
 exige systemd. O acesso público e uploads grandes dependem dos limites Cloudflare.
 
-Backups de datasets/banco e rclone continuam pendentes. O arquivo de recuperação
-do endereço não substitui um backup do Galaxy.
+Backups de datasets/banco, restauração e rclone estão no [guia de backups](backups.md).
+O arquivo de recuperação do endereço não substitui um backup do Galaxy.

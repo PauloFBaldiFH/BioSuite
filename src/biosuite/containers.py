@@ -53,6 +53,8 @@ def install(settings: NativeSettings, output=print):
         raise OperationError('O diretório Docker já existe e não é gerenciado pelo BioSuite.')
     BASE.mkdir(parents=True, exist_ok=True, mode=0o700)
     with lock(BASE / 'install.lock'):
+        if (BASE / 'maintenance.json').exists():
+            raise OperationError('Manutenção pendente; confira o diário antes de alterar a instalação.')
         current = _manifest()
         if current and (current.get('port') != settings.port or current.get('email') != settings.email):
             raise OperationError('A configuração existente é diferente. Não será sobrescrita.')
@@ -125,6 +127,8 @@ def service(action, output=print):
     if action not in ('start', 'stop', 'restart') or not _manifest():
         raise OperationError('Ação inválida ou instalação Docker não detectada.')
     with lock(BASE / 'install.lock'):
+        if (BASE / 'maintenance.json').exists():
+            raise OperationError('Manutenção pendente; confira o diário antes de alterar a instalação.')
         run_logged(compose(action), LOG, output)
     return status()
 

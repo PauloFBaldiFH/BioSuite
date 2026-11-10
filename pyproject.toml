@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "biosuite"
-version = "0.5.0"
+version = "0.6.0"
 description = "Painel de administração modular para Galaxy"
 license = {file = "LICENSE"}
 requires-python = ">=3.10"
@@ -15,7 +15,7 @@ biosuite = "biosuite.cli:main"
 biosuite-config = "biosuite.cli:main"
 
 [tool.setuptools.package-data]
-biosuite = ["assets/*.sh", "assets/docker/*"]
+biosuite = ["assets/*.sh", "assets/docker/*", "assets/*.py"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

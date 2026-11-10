@@ -7,7 +7,8 @@ com painel interativo no terminal e instalação de ferramentas sob demanda.
 instala o painel Python. A tela Instalação prepara Galaxy 26.1.2/PostgreSQL,
 com escolha do modo e da porta local (padrão 8080). Há atualizações do painel
 e APT e um cliente de subdomínios Cloudflare. O broker BioSuite precisa ser
-publicado separadamente; backups/restauração e Windows continuam pendentes.
+publicado separadamente. Backups locais, restauração e transporte rclone estão
+implementados; Windows continua pendente. Veja o [guia de backups](docs/backups.md).
 
 ## Abrir e instalar pelo painel
 
@@ -120,8 +121,9 @@ Execute-o novamente após alterações no código para atualizar o pacote instal
 O painel tem navegação por mouse e teclado, menu lateral com rolagem e telas
 Início, Instalação, Ferramentas, Backups, Conexão, Atualizações e Diagnóstico.
 Atalhos: `d` para diagnóstico, `p` para plano e `q` para sair.
-A gestão de ferramentas exige um Galaxy configurado. Backups estão em
-desenvolvimento; conexão pública exige publicar e configurar o
+A gestão de ferramentas exige um Galaxy configurado. Backups e restauração
+operam em janela de manutenção, com verificação e backup de segurança.
+Conexão pública exige publicar e configurar o
 [broker adaptado](broker/README.md) antes de usar o painel.
 
 Também é possível consultar sem abrir o painel:
