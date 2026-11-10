@@ -122,9 +122,20 @@ verificaram a preservação de um arquivo de dados de teste. O teste fica em
 `tests/native-smoke.sh`; há também um workflow manual de integração.
 
 Esses containers não executam systemd como PID 1: neles o mesmo wrapper da
-unidade foi iniciado em primeiro plano como `biosuitegalaxy`. O ciclo automático
-da unidade systemd e análises científicas ainda precisam de validação própria. Os testes do painel, confirmação, CLI e tratamento de
-falhas são separados dessa validação da aplicação real.
+unidade foi iniciado em primeiro plano como `biosuitegalaxy`.
+
+Em VMs Ubuntu 22.04/24.04 com systemd como PID 1, instalação, parada/início pelo
+comando do painel, API/HTML/JavaScript, catálogo, schema e reexecução também
+passaram. A mesma rodada validou backup, restauração de dataset e rollback com
+falha injetada; veja a [execução de 10/11/2026](https://github.com/PauloFBaldiFH/BioSuite/actions/runs/42887838165),
+commit `ff40f47`, e o [guia de backups](backups.md).
+Ela revelou e permitiu corrigir a herança de um diretório de trabalho privado:
+o instalador e os comandos PostgreSQL nativos usam `/` ao trocar para contas de
+serviço, sem depender do acesso dessas contas ao diretório onde o painel foi aberto.
+
+Reboot da VM, systemd em Debian e análises científicas ainda precisam de
+validação própria. Os testes do painel, confirmação, CLI e tratamento de falhas
+são separados dessa validação da aplicação real.
 
 ## Repetir a validação em ambiente descartável
 
@@ -135,9 +146,11 @@ dados. Usa porta alternativa 8087. Esses containers executam Galaxy em primeiro
 plano com `--no-service`; não certificam o ciclo real via systemd.
 
 O job separado `systemd` usa VMs descartáveis dos runners GitHub Ubuntu
-22.04/24.04 e o mesmo teste em modo systemd. Esse job precisa ser executado
-no GitHub para verificar o ciclo real; sua definição não equivale a um teste
-concluído. Não troque esses runners por servidores de produção.
+22.04/24.04 e o mesmo teste em modo systemd. A execução citada acima passou
+nas duas versões; para repetir, dispare o workflow no GitHub. A opção `backups`
+acrescenta o ciclo completo de restauração. A branch dedicada
+`validation/native-backups` também executa os dois testes completos por push.
+Não troque esses runners por servidores de produção.
 
 Em uma **VM descartável** com uma distribuição suportada e systemd como PID 1,
 execute como root, a partir do checkout:
