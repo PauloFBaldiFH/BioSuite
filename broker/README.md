@@ -28,7 +28,11 @@ A configuração proposta já separa os recursos:
 A reconciliação remove apenas órfãos com o prefixo BioSuite. Há um teste que
 cria um órfão BioSuite e recursos Koha, executa o cron e verifica que somente
 o órfão BioSuite é removido. Não compartilhe esses prefixos com outro broker.
-Um nome ocupado é ajustado pelo servidor. Apenas Galaxy é publicado neste perfil;
+Um nome ocupado é ajustado pelo servidor. A zona Koha também possui a rota
+`*-admin.koha.nexus/*`: mantenha `STAFF_SUFFIX="-admin"` para que a política
+de nomes rejeite esse final. A aprovação automática pode escolher uma variante
+como `bio-laboratorio-admin-2`, que não corresponde à rota do Koha. Apenas Galaxy é publicado neste
+perfil;
 as rotas de ativação de serviços Koha/Tainacan/DSpace não ficam disponíveis.
 
 ## Configurar e publicar
@@ -49,7 +53,9 @@ npx wrangler queues create biosuite-provision-dlq
 ```
 
 2. Em `wrangler.toml`, preencha `CF_ACCOUNT_ID`, `CF_ZONE_ID` e `database_id`
-com os IDs da conta/zona e do **novo** D1. Confirme os nomes das filas e
+com os IDs da conta/zona e do **novo** D1. Acrescente `account_id` no topo
+do TOML (antes de `[vars]`), com o mesmo ID de `CF_ACCOUNT_ID`, para fixar
+a conta de publicação. Confirme os nomes das filas e
 namespaces dos rate limiters. Substitua `routes = []` por:
 
 ```toml
@@ -66,9 +72,19 @@ implantação; o painel deve usar o domínio HTTPS configurado acima.
 npm run typecheck
 npm test
 npm run test:e2e
+npm run check:deploy
 npm run db:migrate
 npm run deploy
 ```
+
+`check:deploy` valida a configuração local com o parser do Wrangler: exige IDs
+preenchidos, conta explícita, perfil Galaxy, domínio novo, Worker, D1 e filas
+com os nomes próprios do BioSuite. `npm run deploy` e `npm run db:migrate`
+executam essa verificação antes de alterar recursos remotos. A configuração
+de exemplo falha intencionalmente até ser preenchida. O teste é offline: não
+comprova que os IDs pertencem à conta nem que o D1 foi criado para BioSuite.
+Confirme isso no painel Cloudflare. Comandos `npx wrangler` diretos não passam
+por essa verificação.
 
 As migrações 0001–0004 preservam o modelo herdado; 0005 acrescenta a porta
 Galaxy. Não execute migrações BioSuite no D1 do Nexus.

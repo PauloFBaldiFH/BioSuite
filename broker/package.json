@@ -12,7 +12,10 @@
     "build:local": "wrangler deploy --dry-run --outdir .wrangler/e2e-build",
     "test:e2e": "npm run build:local && node test/e2e/run.mjs && node test/e2e/dspace.mjs && node test/e2e/galaxy.mjs",
     "db:migrate:local": "wrangler d1 migrations apply biosuite-broker --local",
-    "db:migrate": "wrangler d1 migrations apply biosuite-broker --remote"
+    "db:migrate": "wrangler d1 migrations apply biosuite-broker --remote",
+    "check:deploy": "node scripts/check-deploy.mjs",
+    "predeploy": "npm run check:deploy",
+    "predb:migrate": "npm run check:deploy"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260928.1",

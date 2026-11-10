@@ -112,14 +112,44 @@ Não use essa opção para anunciar um serviço automático como validado.
 
 ## Validação desta entrega
 
-Foram executados testes com Galaxy e PostgreSQL reais em Debian 13 e Ubuntu
-24.04, em containers descartáveis. A API de versão, o HTML, o JavaScript da
+Foram executados testes com Galaxy e PostgreSQL reais em Debian 12/13 e
+Ubuntu 22.04/24.04, em containers descartáveis. Nesta continuação, Debian 12
+usou porta 8086 e Ubuntu 22.04 usou 8085; Debian 13/Ubuntu 24.04 foram
+verificados na entrega anterior. A API de versão, o HTML, o JavaScript da
 interface e o catálogo básico responderam; o esquema foi verificado no
-PostgreSQL e a reexecução preservou a configuração. O teste fica em
+PostgreSQL e a reexecução preservou a configuração. Os testes atuais também
+verificaram a preservação de um arquivo de dados de teste. O teste fica em
 `tests/native-smoke.sh`; há também um workflow manual de integração.
 
 Esses containers não executam systemd como PID 1: neles o mesmo wrapper da
 unidade foi iniciado em primeiro plano como `biosuitegalaxy`. O ciclo automático
-da unidade systemd, Ubuntu 22.04, Debian 12 e análises científicas ainda precisam
-de validação própria. Os testes do painel, confirmação, CLI e tratamento de
+da unidade systemd e análises científicas ainda precisam de validação própria. Os testes do painel, confirmação, CLI e tratamento de
 falhas são separados dessa validação da aplicação real.
+
+## Repetir a validação em ambiente descartável
+
+O job `native` do workflow manual `Native Galaxy integration` cobre Ubuntu
+22.04/24.04 e Debian 12/13. Instala Galaxy/PostgreSQL reais e verifica API, HTML, JavaScript,
+catálogo básico, schema e reexecução preservando configuração e um arquivo de
+dados. Usa porta alternativa 8087. Esses containers executam Galaxy em primeiro
+plano com `--no-service`; não certificam o ciclo real via systemd.
+
+O job separado `systemd` usa VMs descartáveis dos runners GitHub Ubuntu
+22.04/24.04 e o mesmo teste em modo systemd. Esse job precisa ser executado
+no GitHub para verificar o ciclo real; sua definição não equivale a um teste
+concluído. Não troque esses runners por servidores de produção.
+
+Em uma **VM descartável** com uma distribuição suportada e systemd como PID 1,
+execute como root, a partir do checkout:
+
+```bash
+BIOSUITE_SMOKE_SYSTEMD=1 BIOSUITE_SMOKE_PORT=8087 bash tests/native-smoke.sh
+```
+
+Esse modo instala/inicia pelo caminho de produção, verifica HTTP, para e inicia
+pelo comando do painel e repete as verificações após iniciar. O serviço é parado
+ao sair do teste. **Não execute em um servidor com dados reais**: o teste cria
+usuário, banco, configuração e um arquivo de dados de teste nos caminhos fixos
+do BioSuite. O modo systemd recusa iniciar se PID 1 não for systemd. Uma
+verificação estática da unidade, quando `systemd-analyze` estiver disponível,
+não substitui essa execução real nem um teste após reinicialização da VM.
