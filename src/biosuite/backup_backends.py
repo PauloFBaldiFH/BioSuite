@@ -22,7 +22,7 @@ DB = 'biosuitegalaxy'
 RUNTIME = Path('/run/biosuite-backup')
 
 
-def transfer(command, *, source=None, target=None, log=None):
+def transfer(command, *, source=None, target=None, log=None, cwd=None):
     """Fluxos binários grandes nunca passam pelo terminal ou pela memória inteira."""
     log = Path(log)
     log.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -32,7 +32,7 @@ def transfer(command, *, source=None, target=None, log=None):
             with (Path(target).open('wb') if target else open(os.devnull, 'wb')) as stdout:
                 if target:
                     os.chmod(target, 0o600)
-                result = subprocess.run(command, stdin=stdin, stdout=stdout, stderr=errors)
+                result = subprocess.run(command, stdin=stdin, stdout=stdout, stderr=errors, cwd=cwd)
     if result.returncode:
         raise OperationError('Etapa de backup/restauração falhou. Consulte o log privado: ' + str(log))
 
@@ -74,7 +74,7 @@ def local_data_config(config, data, code):
 
 class Backend:
     def sql(self, statement, database=DB, admin=False):
-        return capture(self.pg('psql', database, admin=admin) + ['-v', 'ON_ERROR_STOP=1', '-Atc', statement])
+        return capture(self.pg('psql', database, admin=admin) + ['-v', 'ON_ERROR_STOP=1', '-Atc', statement], cwd='/' if self.mode == 'native' else None)
 
     def check_space(self, info, sizes):
         pass
@@ -110,10 +110,10 @@ class Backend:
         self.sql(f'ALTER DATABASE "{source}" RENAME TO "{target}"', database='postgres', admin=True)
 
     def dump(self, target):
-        transfer(self.pg('pg_dump', DB) + ['--format=custom', '--no-owner', '--no-privileges'], target=target, log=self.log)
+        transfer(self.pg('pg_dump', DB) + ['--format=custom', '--no-owner', '--no-privileges'], target=target, log=self.log, cwd='/' if self.mode == 'native' else None)
 
     def restore_dump(self, source, database):
-        transfer(self.pg('pg_restore', database) + ['--exit-on-error', '--no-owner', '--no-privileges', '--single-transaction'], source=source, log=self.log)
+        transfer(self.pg('pg_restore', database) + ['--exit-on-error', '--no-owner', '--no-privileges', '--single-transaction'], source=source, log=self.log, cwd='/' if self.mode == 'native' else None)
         self.sql('SELECT count(*) FROM galaxy_user', database=database)
         self.sql('SELECT count(*) FROM dataset', database=database)
         self.sql('SELECT count(*) FROM tool_shed_repository', database=database)
