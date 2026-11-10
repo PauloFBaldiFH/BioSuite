@@ -195,3 +195,12 @@ e aumenta o tempo máximo. O fluxo nativo com PostgreSQL/systemd reais está
 preparado para as VMs Ubuntu, mas não foi executado neste ambiente (PID 1 não
 é systemd). Não use esses scripts em produção: eles semeiam dados de teste e
 recusam bancos que já tenham usuários/datasets/jobs.
+
+
+A branch dedicada `validation/native-backups` também aciona somente os jobs
+systemd/backup nativos desse workflow por push. Isso permite executar a validação
+completa nas VMs Ubuntu sem depender de disparo pela API; as quatro imagens do
+job `native` continuam disponíveis pelo disparo manual. Cada push nessa branch
+inicia dois testes completos, por isso ela deve ser usada deliberadamente para
+validação. Logs de falha têm resumos nas anotações do Actions; dados de backup
+não são publicados como artefatos.
