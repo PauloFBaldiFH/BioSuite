@@ -420,9 +420,19 @@ try {
 
   await step("device/start is rate limited (3 per minute per IP)", async () => {
     const body = { institution_name: "Biblioteca Teste", contact_email: "a@b.org" };
+    // Use a fresh key, independent of requests in earlier scenarios. A burst
+    // can straddle a minute boundary: two windows admit at most 3 + 3
+    // requests, so seven consecutive calls must still include a rejection.
+    const headers = { "CF-Connecting-IP": "198.51.100.250" };
     const codes = [];
-    for (let i = 0; i < 2; i++) codes.push((await call("POST", "/v1/device/start", { body })).status);
-    assert.ok(codes.includes(429), `expected a 429, got ${codes}`);
+    for (let i = 0; i < 7; i++) codes.push((await call("POST", "/v1/device/start", { body, headers })).status);
+    assert.equal(codes[0], 200, `fresh IP should be admitted, got ${codes}`);
+    assert.ok(codes.includes(429), `expected a 429 within seven calls, got ${codes}`);
+    assert.ok(codes.every(code => code === 200 || code === 429), `unexpected response: ${codes}`);
+    const other = await call("POST", "/v1/device/start", {
+      body, headers: { "CF-Connecting-IP": "198.51.100.251" },
+    });
+    assert.equal(other.status, 200, "rate limiting must not consume another IP's quota");
   });
 
   console.log(`\nbroker e2e: ${passed} checks passed`);
