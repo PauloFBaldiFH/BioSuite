@@ -121,7 +121,7 @@ def status() -> dict:
     return result
 
 
-def service(action: str) -> dict:
+def _service(action: str) -> dict:
     if action not in ('start', 'stop', 'restart'):
         raise NativeError('Ação de serviço inválida.')
     _require_root()
@@ -134,6 +134,22 @@ def service(action: str) -> dict:
     if result.returncode:
         raise NativeError('Systemd não concluiu a ação. Consulte os logs do serviço.')
     return status()
+
+
+def service(action: str) -> dict:
+    from biosuite.operations import lock, OperationError
+    if action not in ('start', 'stop', 'restart'):
+        raise NativeError('Ação de serviço inválida.')
+    _require_root()
+    if not (BASE / 'complete').is_file():
+        raise NativeError('A instalação gerenciada do Galaxy ainda não foi concluída.')
+    try:
+        with lock(BASE / 'install.lock'):
+            if (BASE / 'maintenance.json').exists():
+                raise NativeError('Manutenção pendente. Confira o diário antes de controlar o serviço.')
+            return _service(action)
+    except OperationError as error:
+        raise NativeError(str(error)) from None
 
 
 def logs() -> str:

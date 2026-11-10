@@ -48,6 +48,7 @@ mkdir -p "$BASE"
 chmod 755 "$BASE"
 exec 9>"$BASE/install.lock"
 flock -n 9 || { echo 'Outra instalação está em andamento.' >&2; exit 1; }
+[[ ! -f "$BASE/maintenance.json" ]] || { echo 'Manutenção pendente. Confira o diário antes de instalar.' >&2; exit 1; }
 if [[ ! -f "$BASE/.biosuite-native" ]]; then
     printf '%s\n' "$COMMIT" >"$BASE/.biosuite-native"
 fi
@@ -184,6 +185,11 @@ cat >"$BASE/start" <<'SH'
 #!/bin/sh
 set -e
 cd /opt/biosuite-galaxy/galaxy
+# BioSuite maintenance gate
+if [[ -f /opt/biosuite-galaxy/maintenance.json && ! -f /run/biosuite-backup/allow-start ]]; then
+    echo 'Manutenção pendente; consulte o diário BioSuite antes de iniciar Galaxy.' >&2
+    exit 75
+fi
 export GALAXY_CONFIG_FILE=/etc/biosuite/galaxy.yml
 exec sh run.sh --skip-wheels --skip-client-build --skip-tool-dependency-initialization
 SH

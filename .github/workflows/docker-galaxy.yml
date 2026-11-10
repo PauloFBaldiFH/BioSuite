@@ -1,10 +1,15 @@
 name: Docker Galaxy integration (manual)
 on:
   workflow_dispatch:
+    inputs:
+      backups:
+        description: Testar backup, restauração e rollback completos (mais disco e tempo)
+        type: boolean
+        default: false
 jobs:
   docker:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: ${{ inputs.backups && 90 || 45 }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -15,6 +20,13 @@ jobs:
           BIOSUITE_DOCKER_HOME: ${{ runner.temp }}/biosuite-docker-smoke
           PYTHONPATH: src
         run: python3 tests/docker-smoke.py
+      - name: Backup, restauração e rollback com Galaxy/PostgreSQL reais
+        if: inputs.backups
+        env:
+          BIOSUITE_DOCKER_HOME: ${{ runner.temp }}/biosuite-docker-smoke
+          BIOSUITE_BACKUP_SMOKE: '1'
+          PYTHONPATH: src
+        run: python3 tests/backups-docker-smoke.py
       - name: Logs e parada dos containers de teste
         if: always()
         env:

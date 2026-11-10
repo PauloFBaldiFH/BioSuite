@@ -63,6 +63,15 @@ class NativeTests(unittest.TestCase):
                 native.service('start; echo bad')
             process.assert_not_called()
 
+    def test_start_before_installation_does_not_create_reserved_directory(self):
+        with tempfile.TemporaryDirectory() as folder:
+            base=Path(folder)/'not-installed'
+            with patch.object(native,'BASE',base),patch('biosuite.native._require_root'),patch('biosuite.native.subprocess.run') as process:
+                with self.assertRaisesRegex(native.NativeError,'não foi concluída'):
+                    native.service('start')
+                self.assertFalse(base.exists())
+                process.assert_not_called()
+
     def test_cli_install_requires_explicit_confirmation(self):
         with patch('biosuite.native.install') as install:
             with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
