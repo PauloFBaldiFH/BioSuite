@@ -15,8 +15,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Conferir resolução DNS do runner
+        env:
+          TEST_IMAGE: ${{ matrix.image }}
         run: |
-          for host in archive.ubuntu.com security.ubuntu.com deb.debian.org; do
+          case "$TEST_IMAGE" in
+            ubuntu:*) hosts='archive.ubuntu.com security.ubuntu.com' ;;
+            debian:*) hosts='deb.debian.org' ;;
+          esac
+          for host in $hosts; do
             if ! getent ahostsv4 "$host"; then
               echo "::error title=DNS do runner::Não foi possível resolver $host no host da CI."
               exit 1
@@ -27,8 +33,7 @@ jobs:
           TEST_IMAGE: ${{ matrix.image }}
         run: |
           set -o pipefail
-          # Compartilha o resolver do runner descartável, sem DNS do bridge Docker.
-          docker run --rm --network host -v "$PWD:/src" -w /src "$TEST_IMAGE" bash tests/linux-smoke.sh 2>&1 | tee /tmp/biosuite-linux-smoke.log
+          docker run --rm -v "$PWD:/src" -w /src "$TEST_IMAGE" bash tests/linux-smoke.sh 2>&1 | tee /tmp/biosuite-linux-smoke.log
       - name: Resumo público da falha Linux
         if: failure()
         run: |
