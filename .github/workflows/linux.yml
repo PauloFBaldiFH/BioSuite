@@ -1,9 +1,13 @@
 name: Linux installer and panel
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
 
 jobs:
   linux:
-    runs-on: ubuntu-latest
+    # Host estável; as distribuições testadas continuam isoladas nos containers.
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
