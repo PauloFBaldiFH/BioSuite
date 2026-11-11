@@ -32,7 +32,7 @@ def read_dataset():
     return capture(containers.compose('exec','-T','galaxy','cat','/data/datasets/000/900/dataset_900001.dat'))
 
 write_dataset('ACGT\n')
-parent=Path(tempfile.mkdtemp(prefix='biosuite-real-backups-'))
+parent=Path(tempfile.mkdtemp(prefix='biosuite-real-backups-',dir=base.base))
 print('Cópias de teste em:',parent,flush=True)
 source=backups.create('docker',parent)
 verify(source)

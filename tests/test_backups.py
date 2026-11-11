@@ -159,6 +159,35 @@ class BackupTests(unittest.TestCase):
         self.assertEqual(self.adapter.stopped,stops)
         self.assertEqual(self.adapter.databases[DB],{'value':'newer'})
         self.assertEqual(set(self.adapter.databases),{DB})
+    def test_rehearsal_and_restore_work_without_default_temporary_filesystem(self):
+        source=self.create();self.mutate()
+        with patch('tempfile.tempdir',str(self.root/'unavailable-system-temp')):
+            self.assertEqual(backups.rehearse('native',source,output=lambda _:None)['database_restore'],'verified')
+            result=backups.restore('native',source,self.parent,output=lambda _:None)
+        self.assertTrue(result['restored'])
+        self.assertEqual((self.data/'datasets/sample.dat').read_text(),'original dataset')
+        self.assertEqual(self.adapter.databases[DB],{'value':'original'})
+        self.assertFalse(list(self.adapter.base.glob('.biosuite-rehearsal-*')))
+        self.assertFalse(list(self.adapter.base.glob('.biosuite-restore-*')))
+    def test_requested_staging_is_private_and_removed_after_use(self):
+        source=self.create();target=self.root/'large-disk'
+        original=self.adapter.prepare_files
+        def inspect(work,metadata):
+            self.assertEqual(work.parent,target)
+            self.assertEqual(work.stat().st_mode & 0o777,0o700)
+            original(work,metadata)
+        with patch.dict(os.environ,{'BIOSUITE_BACKUP_STAGING':str(target)}),patch.object(self.adapter,'prepare_files',side_effect=inspect):
+            backups.rehearse('native',source,output=lambda _:None)
+            backups.restore('native',source,self.parent,output=lambda _:None)
+        self.assertEqual(list(target.iterdir()),[])
+    def test_staging_inside_data_is_refused_without_replacing_live_data(self):
+        source=self.create();self.mutate()
+        with patch.dict(os.environ,{'BIOSUITE_BACKUP_STAGING':str(self.data/'staging')}):
+            with self.assertRaisesRegex(OperationError,'dentro'):
+                backups.restore('native',source,self.parent,output=lambda _:None)
+        self.assertEqual((self.data/'datasets/sample.dat').read_text(),'newer dataset')
+        self.assertEqual(self.adapter.databases[DB],{'value':'newer'})
+        self.assertTrue(self.adapter.active)
     def test_failed_snapshot_keeps_incomplete_folder_and_resumes(self):
         with patch.object(self.adapter,'snapshot_files',side_effect=OperationError('disk failure')):
             with self.assertRaises(OperationError): self.create()

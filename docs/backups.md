@@ -59,6 +59,16 @@ o banco). Filesystems dos destinos/banco também são conferidos. Falta de
 permissões, inodes ou espaço ainda pode impedir a operação; o rollback protege
 o ponto anterior quando uma etapa falha.
 
+Ensaio e restauração criam staging privado no diretório gerenciado da instalação
+(`/opt/biosuite-galaxy` no nativo; diretório BioSuite Docker no outro modo).
+Não usam o temporário global: no Debian 13, `/tmp` pode ficar em RAM. Reserve
+nesse filesystem o espaço de staging descrito acima. Para usar outro disco,
+defina `BIOSUITE_BACKUP_STAGING` com um diretório fora dos dados/código copiados,
+por exemplo `sudo env BIOSUITE_BACKUP_STAGING=/srv/biosuite-staging biosuite-config`.
+As subpastas temporárias têm modo 700 e são removidas após uso normal/falha tratada;
+o destino dos backups continua sendo o informado no painel. Não escolha `/tmp`
+para cópias grandes quando ele estiver em tmpfs.
+
 Payloads e manifesto são sincronizados antes de publicar o nome final. Uma
 cópia incompleta permanece em `.incomplete-*`; não é listada como backup pronto.
 Não há exclusão/retensão automática: remova cópias antigas somente depois de

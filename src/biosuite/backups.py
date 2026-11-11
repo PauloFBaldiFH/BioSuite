@@ -44,6 +44,11 @@ def _destination(parent, adapter):
     return parent
 
 
+def _staging_parent(adapter):
+    # /tmp pode ser tmpfs (padrão no Debian 13); dados científicos precisam de disco.
+    return _destination(os.environ.get('BIOSUITE_BACKUP_STAGING') or adapter.base, adapter)
+
+
 def list_local(directory):
     parent = Path(directory).expanduser()
     if not parent.is_dir():
@@ -196,7 +201,7 @@ def rehearse(mode, folder, output=print):
             raise OperationError('Resolva a manutenção pendente antes do ensaio.')
         adapter.ensure_database()
         try:
-            with tempfile.TemporaryDirectory(prefix='biosuite-rehearsal-') as temporary:
+            with tempfile.TemporaryDirectory(prefix='.biosuite-rehearsal-', dir=_staging_parent(adapter)) as temporary:
                 work = Path(temporary)
                 info = _stage(folder, adapter, work, output)
                 name = _rehearse(adapter, work, output)
@@ -212,7 +217,7 @@ def restore(mode, folder, safety_directory=None, output=print):
     folder = Path(folder).expanduser().resolve()
     with maintenance(mode, output) as (adapter, state):
         # Todos os testes precedem a substituição do destino.
-        with tempfile.TemporaryDirectory(prefix='biosuite-restore-') as temporary:
+        with tempfile.TemporaryDirectory(prefix='.biosuite-restore-', dir=_staging_parent(adapter)) as temporary:
             work = Path(temporary)
             info = _stage(folder, adapter, work, output)
             verified_db = _rehearse(adapter, work, output)

@@ -24,7 +24,7 @@ os.chown(file.parent.parent,account.pw_uid,account.pw_gid)
 def write(value):
     file.write_text(value);os.chmod(file,0o600);os.chown(file,account.pw_uid,account.pw_gid)
 write('ACGT\n')
-parent=Path(tempfile.mkdtemp(prefix='biosuite-native-backups-'))
+parent=Path(tempfile.mkdtemp(prefix='biosuite-native-backups-',dir=b.base))
 source=backups.create('native',parent);verify(source)
 assert backups.rehearse('native',source)['database_restore']=='verified'
 write('CHANGED\n');b.sql('UPDATE dataset SET file_size=8 WHERE id=900001')
