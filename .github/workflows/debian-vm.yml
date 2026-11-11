@@ -18,24 +18,25 @@ jobs:
         release: ['12', '13']
     steps:
       - uses: actions/checkout@v4
-      - name: VM Debian descartável
-        uses: vmactions/debian-vm@626b64f9a6be64bbeaf3850f8bac2532d4e77db4 # v1
-        with:
-          release: ${{ matrix.release }}
-          arch: x86_64
-          mem: 6144
-          cpu: 2
-          sync: rsync
-          copyback: false
-          disable-cache: true
-          prepare: |
-            set -eu
-            . /etc/os-release
-            test "$ID:$VERSION_ID" = 'debian:${{ matrix.release }}'
-            test "$(cat /proc/1/comm)" = systemd
-            install -m 600 /dev/null /etc/biosuite-ci-disposable
-            df -h /
-      - name: Instalação, backups, rollback e reboot real
+      - name: VM oficial Debian, instalação, backups e reboot real
         env:
-          BIOSUITE_DEBIAN_VM_SMOKE: '1'
-        run: python3 tests/debian-vm-smoke.py
+          DEBIAN_RELEASE: ${{ matrix.release }}
+        run: |
+          set -o pipefail
+          devices=()
+          if [[ -c /dev/kvm ]]; then devices+=(--device /dev/kvm); fi
+          docker run --rm "${devices[@]}" -v "$PWD:/src:ro" -w /src \
+            -e GITHUB_ACTIONS=true -e BIOSUITE_DEBIAN_VM_SMOKE=1 \
+            debian:13-slim bash tests/debian-qemu-smoke.sh "$DEBIAN_RELEASE" 2>&1 | tee /tmp/biosuite-debian-qemu.log
+      - name: Resumo público da falha QEMU
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          from collections import deque
+          from pathlib import Path
+          path = Path('/tmp/biosuite-debian-qemu.log')
+          if path.is_file():
+              with path.open(errors='replace') as stream:
+                  text = ''.join(deque(stream, maxlen=40))[-10000:]
+              print('::error title=Debian QEMU::' + text.replace('%','%25').replace('\r','%0D').replace('\n','%0A'))
+          PY

@@ -170,21 +170,27 @@ não substitui essa execução real nem um teste após reinicialização da VM.
 ## Debian com systemd e reinicialização
 
 O workflow `Debian VM systemd and reboot` cria guests QEMU Debian 12/13, em
-x86_64, dentro de runners GitHub Ubuntu descartáveis. A action de VM está fixada
-por commit. O teste não reinicia o runner host e não usa servidores de produção.
+x86_64, dentro de runners GitHub Ubuntu descartáveis. O harness
+`tests/debian-qemu-smoke.sh` prepara QEMU em um container Debian e usa imagens
+cloud oficiais, verificadas com o SHA-512 publicado por HTTPS. O nome da imagem
+fica registrado no log. Não precisa instalar QEMU pelo APT do host Ubuntu.
+O teste não reinicia o runner host e não usa servidores de produção.
 Pode ser disparado manualmente; pushes na branch dedicada
 `validation/debian-reboot` também executam as duas VMs.
 
 O controlador `tests/debian-vm-smoke.py` conecta somente ao alias SSH `debian`
-criado pela action. Executa os testes nativos de instalação e backup, insere um
+criado pelo harness, com chave de host SSH previamente registrada no seed
+cloud-init e conferência estrita habilitada. Executa os testes nativos de instalação e backup, insere um
 dataset fictício, registra o `boot_id` e agenda o reboot do guest. Aguarda outro
 `boot_id` e confere o início automático do Galaxy, API/HTML, PostgreSQL, conteúdo
 do dataset e checksum da configuração. A verificação após o reboot não inicia
 o Galaxy manualmente. Os dados fictícios são removidos ao terminar.
 
 O teste exige identificação explícita de VM descartável e recusa banco com
-datasets existentes. Não o execute numa instalação real. Cache de imagem e
-cópia dos resultados de volta ao host ficam desabilitados; backups e credenciais
-não são enviados como artefatos. As anotações do Actions mostram a conclusão de
+datasets existentes. Não o execute numa instalação real. O checkout é montado
+somente para leitura no container e copiado para o guest. Imagem, chaves SSH
+temporárias e backups são descartados ao terminar; não são enviados como
+artefatos. KVM é usado quando disponível, com emulação TCG como alternativa.
+As anotações do Actions mostram a conclusão de
 cada etapa e um resumo das falhas. A definição desse teste, por si só, não
 comprova que Debian/systemd/reboot passaram; registre o resultado da execução.
