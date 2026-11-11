@@ -1,0 +1,41 @@
+name: Debian VM systemd and reboot
+on:
+  push:
+    branches: [validation/debian-reboot]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  debian:
+    # Apenas runners GitHub descartáveis: instala Galaxy e reinicia o guest QEMU.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        release: ['12', '13']
+    steps:
+      - uses: actions/checkout@v4
+      - name: VM Debian descartável
+        uses: vmactions/debian-vm@626b64f9a6be64bbeaf3850f8bac2532d4e77db4 # v1
+        with:
+          release: ${{ matrix.release }}
+          arch: x86_64
+          mem: 6144
+          cpu: 2
+          sync: rsync
+          copyback: false
+          disable-cache: true
+          prepare: |
+            set -eu
+            . /etc/os-release
+            test "$ID:$VERSION_ID" = 'debian:${{ matrix.release }}'
+            test "$(cat /proc/1/comm)" = systemd
+            install -m 600 /dev/null /etc/biosuite-ci-disposable
+            df -h /
+      - name: Instalação, backups, rollback e reboot real
+        env:
+          BIOSUITE_DEBIAN_VM_SMOKE: '1'
+        run: python3 tests/debian-vm-smoke.py

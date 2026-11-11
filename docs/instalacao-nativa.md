@@ -166,3 +166,25 @@ usuário, banco, configuração e um arquivo de dados de teste nos caminhos fixo
 do BioSuite. O modo systemd recusa iniciar se PID 1 não for systemd. Uma
 verificação estática da unidade, quando `systemd-analyze` estiver disponível,
 não substitui essa execução real nem um teste após reinicialização da VM.
+
+## Debian com systemd e reinicialização
+
+O workflow `Debian VM systemd and reboot` cria guests QEMU Debian 12/13, em
+x86_64, dentro de runners GitHub Ubuntu descartáveis. A action de VM está fixada
+por commit. O teste não reinicia o runner host e não usa servidores de produção.
+Pode ser disparado manualmente; pushes na branch dedicada
+`validation/debian-reboot` também executam as duas VMs.
+
+O controlador `tests/debian-vm-smoke.py` conecta somente ao alias SSH `debian`
+criado pela action. Executa os testes nativos de instalação e backup, insere um
+dataset fictício, registra o `boot_id` e agenda o reboot do guest. Aguarda outro
+`boot_id` e confere o início automático do Galaxy, API/HTML, PostgreSQL, conteúdo
+do dataset e checksum da configuração. A verificação após o reboot não inicia
+o Galaxy manualmente. Os dados fictícios são removidos ao terminar.
+
+O teste exige identificação explícita de VM descartável e recusa banco com
+datasets existentes. Não o execute numa instalação real. Cache de imagem e
+cópia dos resultados de volta ao host ficam desabilitados; backups e credenciais
+não são enviados como artefatos. As anotações do Actions mostram a conclusão de
+cada etapa e um resumo das falhas. A definição desse teste, por si só, não
+comprova que Debian/systemd/reboot passaram; registre o resultado da execução.
