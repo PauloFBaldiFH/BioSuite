@@ -17,7 +17,7 @@ from collections import deque
 from pathlib import Path
 import sys
 with Path(sys.argv[1]).open(errors='replace') as stream:
-    text = ''.join(deque(stream, maxlen=35))[-8000:]
+    text = ''.join(deque(stream, maxlen=35))[-3000:]
 print('::error title=Boot Debian QEMU::' + text.replace('%','%25').replace('\r','%0D').replace('\n','%0A'))
 PY
     fi

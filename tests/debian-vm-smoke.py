@@ -14,6 +14,8 @@ def remote(command, timeout=60, check=True):
     if result.stdout:
         print(result.stdout, end='', flush=True)
     if check and result.returncode:
+        detail = result.stdout[-3000:].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+        print('::error title=Comando no guest Debian::' + detail, flush=True)
         raise RuntimeError(f'Comando no guest falhou: código {result.returncode}')
     return result
 
@@ -57,7 +59,7 @@ if __name__ == '__main__':
         # Dados fictícios, sem credenciais de produção; resumir também nas anotações públicas.
         try:
             result = remote("journalctl -u biosuite-galaxy.service -n 25 --no-pager; tail -n 25 /var/log/biosuite-install/galaxy.log /var/log/biosuite-install/backups.log", check=False)
-            text = result.stdout[-10000:].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+            text = result.stdout[-3000:].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
             print('::error title=Integração Debian VM::' + text, flush=True)
         except Exception as error:
             print('Diagnóstico do guest indisponível:', type(error).__name__, flush=True)
