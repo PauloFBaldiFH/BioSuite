@@ -133,8 +133,14 @@ Ela revelou e permitiu corrigir a herança de um diretório de trabalho privado:
 o instalador e os comandos PostgreSQL nativos usam `/` ao trocar para contas de
 serviço, sem depender do acesso dessas contas ao diretório onde o painel foi aberto.
 
-Reboot da VM, systemd em Debian e análises científicas ainda precisam de
-validação própria. Os testes do painel, confirmação, CLI e tratamento de falhas
+Em VMs Debian 12/13, o ciclo completo passou em 11/11/2026, incluindo reboot
+real, início automático e preservação de PostgreSQL, dataset e configuração;
+veja a [execução](https://github.com/PauloFBaldiFH/BioSuite/actions/runs/43048527427),
+commit `66c2c3d`. Essa validação também permitiu corrigir o staging de backups
+que dependia do temporário global, insuficiente em `/tmp` com tmpfs.
+
+Reboot no Ubuntu e análises científicas ainda precisam de validação própria.
+Os testes do painel, confirmação, CLI e tratamento de falhas
 são separados dessa validação da aplicação real.
 
 ## Repetir a validação em ambiente descartável
@@ -191,6 +197,12 @@ datasets existentes. Não o execute numa instalação real. O checkout é montad
 somente para leitura no container e copiado para o guest. Imagem, chaves SSH
 temporárias e backups são descartados ao terminar; não são enviados como
 artefatos. KVM é usado quando disponível, com emulação TCG como alternativa.
-As anotações do Actions mostram a conclusão de
-cada etapa e um resumo das falhas. A definição desse teste, por si só, não
-comprova que Debian/systemd/reboot passaram; registre o resultado da execução.
+As anotações do Actions mostram a conclusão de cada etapa e um resumo das
+falhas. A execução citada acima passou nas duas versões. Ela verifica reboot
+normal, sem simular queda de energia ou interrupção abrupta da restauração.
+
+O workflow do painel Linux usa um runner Ubuntu 24.04 fixo e testa as quatro
+distribuições em containers. A resolução dos mirrors é conferida por
+distribuição: falhas de DNS ficam explícitas nas anotações, antes do bootstrap.
+O log de falha do bootstrap também recebe um resumo limitado. Falha de rede não
+é convertida em aprovação do teste; mirrors e verificações APT/TLS são preservados.

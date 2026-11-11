@@ -5,7 +5,9 @@ Koha Nexus e Galaxy. Estão implementados o painel, o diagnóstico, a gestão de
 repositórios e a instalação Galaxy/PostgreSQL nativa ou Docker, além de manutenção APT e
 atualização do painel. O cliente e broker Cloudflare têm testes locais. API e interface
 foram verificadas em Debian 12/13 e Ubuntu 22.04/24.04. Instalação e stop/start
-via systemd, backup, restauração e rollback passaram em VMs Ubuntu 22.04/24.04.
+via systemd, backup, restauração e rollback passaram em VMs Ubuntu 22.04/24.04
+e Debian 12/13. Nas VMs Debian, reboot com início automático e dados preservados
+também passou.
 Os demais componentes ainda têm validações pendentes; veja o
 [guia da instalação nativa](instalacao-nativa.md).
 
@@ -30,8 +32,8 @@ com instalação por um comando e launcher permanente. Os testes Linux usam
 containers apenas para isolar as distribuições: a instalação final permite escolher nativo ou Docker.
 A mesma matriz foi verificada com Galaxy/PostgreSQL em primeiro plano,
 com Ubuntu 22.04 e Debian 12 acrescentados nesta continuação. O ciclo real
-systemd passou nas VMs Ubuntu 22.04/24.04. Debian com systemd, reboot da máquina
-e as ferramentas científicas exigem validação própria.
+systemd passou nas VMs Ubuntu 22.04/24.04 e Debian 12/13. Reboot passou em
+Debian 12/13; reboot no Ubuntu e as ferramentas científicas exigem validação própria.
 No Windows, usar Ubuntu em WSL2, com systemd e os dados no filesystem Linux;
 evitar armazenar datasets e ambientes científicos em `/mnt/c`.
 Outras distribuições e arquiteturas só serão anunciadas após testes próprios.
@@ -114,7 +116,7 @@ da etapa consistente. Backups online ficam para uma estratégia validada própri
 Cada backup tem manifesto, versões, identificação do ponto de captura e
 checksums. A tela/CLI inclui ensaio SQL temporário, restauração com cópia de
 segurança e transporte rclone; veja [o guia](backups.md). O ciclo nativo via
-systemd passou em VMs Ubuntu 22.04/24.04; um provedor real de nuvem ainda precisa
+systemd passou em VMs Ubuntu 22.04/24.04 e Debian 12/13; um provedor real de nuvem ainda precisa
 de validação. Validar conteúdo e integridade, testar a restauração em destino
 isolado e criar backup de segurança antes de substituir uma instalação.
 Restaurar primeiro para staging, com verificação de espaço, permissões,

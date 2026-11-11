@@ -211,6 +211,18 @@ de uma queda abrupta. O executor desta conversa não usa systemd; a integração
 foi executada nas VMs descartáveis do GitHub. Não use esses scripts em produção: eles semeiam dados de teste e
 recusam bancos que já tenham usuários/datasets/jobs.
 
+Em 11/11/2026, o mesmo ciclo passou em VMs oficiais Debian 12/13, junto com
+reboot normal e início automático com PostgreSQL, configuração e dataset
+preservados ([execução](https://github.com/PauloFBaldiFH/BioSuite/actions/runs/43048527427),
+commit `66c2c3d`). No Debian 13, a validação revelou falta de espaço no temporário
+global em RAM. O destino do fixture passou a usar disco, e ensaio/restauração
+passaram a usar staging privado no diretório gerenciado, com opção de outro
+disco. Os testes de regressão cobrem temporário global indisponível, permissões
+do staging e recusa de staging dentro dos dados ativos. A correção também passou
+novamente no Docker real: backup, ensaio SQL, restauração com leitura pelo object
+store sem privilégios e rollback PostgreSQL com falha injetada. A suíte local
+completa passou com 83 testes.
+
 A branch dedicada `validation/native-backups` também aciona somente os jobs
 systemd/backup nativos desse workflow por push. Isso permite executar a validação
 completa nas VMs Ubuntu sem depender de disparo pela API; as quatro imagens do

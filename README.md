@@ -159,7 +159,12 @@ conferiram também portas alternativas e preservação de um arquivo de dados.
 Em VMs Ubuntu 22.04/24.04, instalação, stop/start via systemd, backup completo,
 restauração de dataset e rollback com falha injetada também passaram
 ([execução no Actions](https://github.com/PauloFBaldiFH/BioSuite/actions/runs/42887838165)).
-Reinicialização da máquina, análises científicas, Windows/WSL e a publicação real no Cloudflare ainda
+Em VMs Debian 12/13, o mesmo ciclo passou, incluindo reboot real e início
+automático com configuração e dataset preservados
+([execução no Actions](https://github.com/PauloFBaldiFH/BioSuite/actions/runs/43048527427)).
+O staging dos backups usa disco no diretório gerenciado; outro disco pode ser
+selecionado com `BIOSUITE_BACKUP_STAGING`, conforme o [guia](docs/backups.md).
+Reboot no Ubuntu, análises científicas, Windows/WSL e a publicação real no Cloudflare ainda
 precisam de validação. Os testes do broker executam Worker/D1/filas/DO locais
 e cliente Python real com API Cloudflare simulada.
 
