@@ -14,4 +14,18 @@ jobs:
         env:
           TEST_IMAGE: ${{ matrix.image }}
         run: |
-          docker run --rm -v "$PWD:/src" -w /src "$TEST_IMAGE" bash tests/linux-smoke.sh
+          set -o pipefail
+          docker run --rm -v "$PWD:/src" -w /src "$TEST_IMAGE" bash tests/linux-smoke.sh 2>&1 | tee /tmp/biosuite-linux-smoke.log
+      - name: Resumo público da falha Linux
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          from collections import deque
+          from pathlib import Path
+          path = Path('/tmp/biosuite-linux-smoke.log')
+          if path.is_file():
+              with path.open(errors='replace') as stream:
+                  text = ''.join(deque(stream, maxlen=50))[-10000:]
+              text = text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+              print('::error title=Linux installer and panel::' + text)
+          PY
