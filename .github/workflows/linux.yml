@@ -14,12 +14,21 @@ jobs:
         image: [ubuntu:22.04, ubuntu:24.04, debian:12-slim, debian:13-slim]
     steps:
       - uses: actions/checkout@v4
+      - name: Conferir resolução DNS do runner
+        run: |
+          for host in archive.ubuntu.com security.ubuntu.com deb.debian.org; do
+            if ! getent ahostsv4 "$host"; then
+              echo "::error title=DNS do runner::Não foi possível resolver $host no host da CI."
+              exit 1
+            fi
+          done
       - name: Bootstrap, panel tests and repeat installation
         env:
           TEST_IMAGE: ${{ matrix.image }}
         run: |
           set -o pipefail
-          docker run --rm -v "$PWD:/src" -w /src "$TEST_IMAGE" bash tests/linux-smoke.sh 2>&1 | tee /tmp/biosuite-linux-smoke.log
+          # Compartilha o resolver do runner descartável, sem DNS do bridge Docker.
+          docker run --rm --network host -v "$PWD:/src" -w /src "$TEST_IMAGE" bash tests/linux-smoke.sh 2>&1 | tee /tmp/biosuite-linux-smoke.log
       - name: Resumo público da falha Linux
         if: failure()
         run: |
